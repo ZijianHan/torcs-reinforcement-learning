@@ -1,5 +1,6 @@
 from gym_torcs import TorcsEnv
 import numpy as np
+from numpy import exp
 import random
 import argparse
 from keras.models import model_from_json, Model
@@ -86,15 +87,15 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
     LRC = 0.001     #Lerning rate for Critic
 
     action_dim = 2  #Steering/Acceleration/Brake
-    state_dim = 29+36+1  #of sensors input
+    state_dim = 29+36  #of sensors input
 
     np.random.seed(1337)
 
     vision = False
 
-    EXPLORE = 100000.
+    EXPLORE = 90000.
     episode_count = 3000
-    max_steps = 10000
+    max_steps = 800
     reward = 0
     done = False
     step = 0
@@ -150,9 +151,11 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
         else:
             ob = env.reset()
 
-        s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
+        s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))#, ob.racePos))
 
         total_reward = 0.
+        damage_steps = 0
+
         for j in range(max_steps):
             loss = 0
             epsilon = 1- step*1.0 / EXPLORE
@@ -162,23 +165,32 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
             a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
 
 
+            #random exploration
+            dice = np.random.rand(1)
+            if dice < (exp(500 - i)-1) / (exp(500)-1):
+            #noise_t[0][0] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][0],  0.0 , 0.6, 0.40)
+            #noise_t[0][1] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][1],  0.8 , 1.0, 0.30)
 
-            noise_t[0][0] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][0],  0.0 , 0.6, 0.40)
-            noise_t[0][1] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][1],  0.8 , 1.0, 0.30)
+                noise_t[0][0] = train_indicator * (random.random()*2 - 1)
+                noise_t[0][1] = train_indicator * (random.random()*2 - 1)
+                #The following code do the stochastic brake
+                #if random.random() <= 0.1:
+                #    print("********Now we apply the brake***********")
+                #    noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2],  0.2 , 1.00, 0.10)
 
-            #The following code do the stochastic brake
-            #if random.random() <= 0.1:
-            #    print("********Now we apply the brake***********")
-            #    noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2],  0.2 , 1.00, 0.10)
-
-            a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
-            a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
+                a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
+                a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
+            else:
+                a_t = a_t_original
 
             a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob)
 
             ob, r_t, done, info = env.step(a_t_primitive)
 
-            s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents, ob.racePos))
+            if r_t = -10:
+                damage_steps += 1
+
+            s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents))#, ob.racePos))
 
             buff.add(s_t, a_t[0], r_t, s_t1, done)      #Add replay buffer
 
@@ -215,6 +227,7 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
             step += 1
             if done:
                 break
+        damage_rate = (float)(damage_steps / j*100)
 
         if np.mod(i, 3) == 0:
             if (train_indicator):
@@ -235,11 +248,13 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
         plt.ylabel("Episodic total reward")
         plt.subplot(312)
         plt.plot(i,total_reward/j,'bo')
-        plt.ylabel("Expected reward each step")
+        plt.xlabel("Episodie")
+        plt.ylabel("Expected reward per step")
         plt.subplot(313)
-        plt.plot(i,loss/j,'go')
-        plt.ylabel("Loss")
-        plt.ylim(0,5000)
+        plt.plot(i, damage_rate, 'go')
+        plt.xlabel("Episodie")
+        plt.ylabel("Damage rate per episode [%]")
+        #dplt.ylim(0,5000)
         plt.draw()
         plt.show()
         plt.pause(0.001)

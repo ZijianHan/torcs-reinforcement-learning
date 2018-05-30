@@ -140,7 +140,9 @@ class TorcsEnv:
         racePos = obs['racePos']
 
         progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos']+0.5)
-        reward = progress/10
+
+        #progress = sp * 100 - sp * np.abs(obs['trackPos'] + 0.5)
+        reward = progress/40
 
         # if drive on left, give a negative reward 
         if trackPos > 0:
@@ -148,10 +150,16 @@ class TorcsEnv:
 
         episode_terminate = False
         # collision detection
+
+        #if obs['racePos'] == 1:
+         #   reward = -2
+         #   episode_terminate = True
+         #   client.R.d['meta'] = True
+
         if obs['damage'] - obs_pre['damage'] > 0:
             reward = -10.0
-            episode_terminate = True
-            client.R.d['meta'] = True
+            #episode_terminate = True
+            #client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track
