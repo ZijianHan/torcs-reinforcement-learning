@@ -21,7 +21,7 @@ import timeit
 import snakeoil3_gym as snakeoil3
 
 OU = OU()       #Ornstein-Uhlenbeck Process
-def Get_actions(delta, speed_target, ob):
+def Get_actions(delta, speed_target, ob, safety_constrain = True):
     ob_angle = ob.angle
     ob_speedX = ob.speedX * 300
     lateralSetPoint = delta
@@ -66,7 +66,27 @@ def Get_actions(delta, speed_target, ob):
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
 
-    ob.opponents
+    safety_distance_long = 15/200
+    safety_distance_lat = 15/200
+    #print(ob.opponents)
+
+    if (safety_constrain):
+        for i in range(6):
+            if ob.opponents[i+14] < safety_distance_long:
+                action_accel = 0
+                action_brake = 0.2
+                print("Frontal collision warning")
+
+        for j in range(8):
+            print(ob.opponents[j+22])
+            if ob.opponents[j+22] < safety_distance_lat:
+                #action_steer += 0.2
+                action_steer += 0.5*(15-(ob.opponents[j+22] * 200))/15
+                print("Side collision warning")
+
+
+
+
 
 
     a_t = [action_steer, action_accel, action_brake]
@@ -76,7 +96,7 @@ def Get_actions(delta, speed_target, ob):
     #print('accel:',action_accel)
     #print('brake:',action_brake)
     return a_t
-def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
+def playGame(train_indicator=0, safety_constrain_flag = True):    #1 means Train, 0 means simply Run
     initialization = 0
     episode_trained = 0
     BUFFER_SIZE = 100000
@@ -180,7 +200,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
             a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
 
-            a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob)
+            a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob, safety_constrain = safety_constrain_flag)
 
             ob, r_t, done, info = env.step(a_t_primitive)
 
