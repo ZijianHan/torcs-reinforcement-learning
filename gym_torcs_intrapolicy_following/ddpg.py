@@ -75,7 +75,7 @@ def Get_actions(delta, speed_target, ob):
     #print('brake:',action_brake)
     return a_t
 
-def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
+def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
     initialization = 0
     episode_trained = 0
     BUFFER_SIZE = 100000

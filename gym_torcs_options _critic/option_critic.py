@@ -18,6 +18,11 @@ from keras import backend as K
 from scipy.special import expit
 from scipy.misc import logsumexp
 
+from ReplayBuffer import ReplayBuffer
+from ActorNetwork import ActorNetwork
+from CriticNetwork import CriticNetwork
+import snakeoil3_gym as snakeoil3
+
 from gym_torcs_overtake import TorcsEnv
 
 class PolicyOverOption:
@@ -244,20 +249,17 @@ class IntraOptionPolicy:
     def __init__(self, sess, option):
         self.sess = sess
         self.option_behavior = option # 1 for overtaking, 2 for following
-
-    def act(self, state):
-        if option == 0:
-            offset = -0.5
+        self.actor = ActorNetwork(self.sess, args.state_size, args.state_size, args.batch_size, args.tau, args.learning_rate_actor)
+        if option == 1:
+            actor.model.load_weights("actormodel_overtaking.h5")
         else:
-            offset = 0.5
-        lateralSetPoint = offset
-        pLateralOffset = 0.6
-        pAngleOffset = 12
+            actor.model.load_weights("actormodel_following.h5")
 
-        action_steer = -pLateralOffset *(ob.trackPos + lateralSetPoint) + pAngleOffset * ob.angle
+    def act(self, ob):
+        s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
+        a_t = self.actor.model.predict(s_t.reshape(1, s_t.shape[0]))
 
-        #action_steer = np.tanh(action_steer)
-        a_t_primitive = [action_steer]
+        a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob)
 
         return a_t_primitive
 

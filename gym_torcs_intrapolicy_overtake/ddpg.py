@@ -54,7 +54,7 @@ def Get_actions(delta, speed_target, ob):
         action_accel = 0
     else:
         action_brake = 0
-        action_accel = 0.05 * (target_speed - ob_speedX)
+        action_accel = 0.1 * (target_speed - ob_speedX)
         if ob_speedX < target_speed - (action_steer*50):
             action_accel+= .01
         if ob_speedX < 10:
@@ -70,7 +70,7 @@ def Get_actions(delta, speed_target, ob):
     a_t = [action_steer, action_accel, action_brake]
     #print('actual speed is:',ob_speedX)
     #print('target_speed is:',speed_target, ';',target_speed)
-    print('steer:', action_steer,delta)
+    #print('steer:', action_steer,delta)
     #print('accel:',action_accel)
     #print('brake:',action_brake)
     return a_t
@@ -91,9 +91,9 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
 
     vision = False
 
-    EXPLORE = 100000.
-    episode_count = 3000
-    max_steps = 600
+    EXPLORE = 20000.
+    episode_count = 2000
+    max_steps = 50000
     reward = 0
     done = False
     step = 0
@@ -130,10 +130,10 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             json.dump(critic.model.to_json(), outfile)
 
     try:
-        actor.model.load_weights("actormodel.h5")
-        critic.model.load_weights("criticmodel.h5")
-        actor.target_model.load_weights("actormodel.h5")
-        critic.target_model.load_weights("criticmodel.h5")
+        actor.model.load_weights("actormodel_overtaking.h5")
+        critic.model.load_weights("criticmodel_overtaking.h5")
+        actor.target_model.load_weights("actormodel_overtaking.h5")
+        critic.target_model.load_weights("criticmodel_overtaking.h5")
         print("Weight load successfully")
     except:
         print("Cannot find the weight")
@@ -143,7 +143,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
     for i in range(episode_count):
 
         print("Episode : " + str(i) + " Replay Buffer " + str(buff.count()))
-
+        print("Epsilon is: ", epsilon)
         if np.mod(i, 3) == 0:
             ob = env.reset(relaunch=True)   #relaunch TORCS every 3 episode because of the memory leak error
         else:
@@ -153,6 +153,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
         s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
 
         total_reward = 0.
+        damage_steps = 0
         for j in range(max_steps):
             loss = 0
             epsilon = 1- step*1.0 / EXPLORE
@@ -160,21 +161,29 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             noise_t = np.zeros([1,action_dim])
 
             a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
-            noise_t[0][0] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][0],  0.0 , 0.60, 0.40)
+            noise_t[0][0] = train_indicator * max(epsilon, 0.2) * OU.function(a_t_original[0][0],  0.0 , 0.80, 0.80)
             #noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  1.0 , 1.00, 0.10)
-            noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  0.9 , 1.0, 0.10)
+            noise_t[0][1] = train_indicator * max(epsilon, 0.2) * OU.function(a_t_original[0][1],  0.9 , 1.0, 0.10)
 
             #The following code do the stochastic brake
             #if random.random() <= 0.1:
             #    print("********Now we apply the brake***********")
             #    noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2],  0.2 , 1.00, 0.10)
-
+            '''
+            if np.random.randn() < max(epsilon,0.05):
+                a_t[0][0] = np.random.randn()*2-1
+            else:
+                a_t[0][0] = a_t_original[0][0]
+            '''
             a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
             a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
 
             a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob)
 
             ob, r_t, done, info = env.step(a_t_primitive)
+
+            if r_t == -20:
+                damage_steps += 1
 
             s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents, ob.racePos))
 
@@ -214,14 +223,16 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             if done:
                 break
 
+        damage_rate = (float)(damage_steps/j*100)
+
         if np.mod(i, 3) == 0:
             if (train_indicator):
                 print("Now we save model")
-                actor.model.save_weights("actormodel_following.h5", overwrite=True)
+                actor.model.save_weights("actormodel_overtaking.h5", overwrite=True)
                 with open("actormodel.json", "w") as outfile:
                     json.dump(actor.model.to_json(), outfile)
 
-                critic.model.save_weights("criticmodel_following.h5", overwrite=True)
+                critic.model.save_weights("criticmodel_overtaking.h5", overwrite=True)
                 with open("criticmodel.json", "w") as outfile:
                     json.dump(critic.model.to_json(), outfile)
 
@@ -233,11 +244,12 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
         plt.ylabel("Episodic total reward")
         plt.subplot(312)
         plt.plot(i,total_reward/j,'bo')
+        plt.xlabel("Episodie")
         plt.ylabel("Expected reward each step")
         plt.subplot(313)
-        plt.plot(i,loss/j,'go')
-        plt.ylabel("Loss")
-        plt.ylim(0,2000)
+        plt.plot(i,damage_rate,'go')
+        plt.xlabel("Episodie")
+        plt.ylabel("Damage rate per episode [%]")
         plt.draw()
         plt.show()
         plt.pause(0.001)
