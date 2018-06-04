@@ -94,7 +94,7 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
     vision = False
 
     EXPLORE = 90000.
-    episode_count = 3000
+    episode_count = 300
     max_steps = 800
     reward = 0
     done = False
@@ -167,7 +167,7 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
 
             #random exploration
             dice = np.random.rand(1)
-            if dice < (exp(500 - i)-1) / (exp(500)-1):
+            if dice < (exp(250 - i)-1) / (exp(250)-1):
             #noise_t[0][0] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][0],  0.0 , 0.6, 0.40)
             #noise_t[0][1] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][1],  0.8 , 1.0, 0.30)
 
@@ -187,7 +187,7 @@ def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
 
             ob, r_t, done, info = env.step(a_t_primitive)
 
-            if r_t = -10:
+            if r_t == -10:
                 damage_steps += 1
 
             s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents))#, ob.racePos))

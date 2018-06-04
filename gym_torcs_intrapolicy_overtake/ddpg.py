@@ -165,7 +165,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  0.9 , 1.0, 0.10)
 
             #The following code do the stochastic brake
-            #if random.random() <= 0.1:
+            #if random.random() <= 0.1:+++
             #    print("********Now we apply the brake***********")
             #    noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2],  0.2 , 1.00, 0.10)
 
@@ -233,11 +233,13 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
         plt.ylabel("Episodic total reward")
         plt.subplot(312)
         plt.plot(i,total_reward/j,'bo')
-        plt.ylabel("Expected reward each step")
+        plt.xlabel("Episodie")
+        plt.ylabel("Expected reward per step")
         plt.subplot(313)
-        plt.plot(i,loss/j,'go')
-        plt.ylabel("Loss")
-        plt.ylim(0,2000)
+        plt.plot(i, damage_rate, 'go')
+        plt.xlabel("Episodie")
+        plt.ylabel("Damage rate per episode [%]")
+        #dplt.ylim(0,5000)
         plt.draw()
         plt.show()
         plt.pause(0.001)

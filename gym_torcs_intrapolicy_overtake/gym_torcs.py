@@ -158,7 +158,7 @@ class TorcsEnv:
         reward = reward_pos - trackPos_dif - speed_dif
         '''
 
-        progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - 0.5*sp * np.abs(obs['trackPos']+0.5)
+        progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos'])
         reward = progress/20
 
 
