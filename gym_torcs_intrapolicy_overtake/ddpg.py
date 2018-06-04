@@ -66,6 +66,8 @@ def Get_actions(delta, speed_target, ob):
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
 
+    ob.opponents
+
 
     a_t = [action_steer, action_accel, action_brake]
     #print('actual speed is:',ob_speedX)
@@ -85,7 +87,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
     LRC = 0.001     #Lerning rate for Critic
 
     action_dim = 2  #Steering/Acceleration/Brake
-    state_dim = 29+36+1  #of sensors input
+    state_dim = 29+36  #of sensors input
 
     np.random.seed(1337)
 
@@ -93,7 +95,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
 
     EXPLORE = 20000.
     episode_count = 2000
-    max_steps = 50000
+    max_steps = 500
     reward = 0
     done = False
     step = 0
@@ -130,10 +132,10 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             json.dump(critic.model.to_json(), outfile)
 
     try:
-        actor.model.load_weights("actormodel_overtaking.h5")
-        critic.model.load_weights("criticmodel_overtaking.h5")
-        actor.target_model.load_weights("actormodel_overtaking.h5")
-        critic.target_model.load_weights("criticmodel_overtaking.h5")
+        actor.model.load_weights("actormodel.h5")
+        critic.model.load_weights("criticmodel.h5")
+        actor.target_model.load_weights("actormodel.h5")
+        critic.target_model.load_weights("criticmodel.h5")
         print("Weight load successfully")
     except:
         print("Cannot find the weight")
@@ -150,7 +152,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             ob = env.reset()
 
 
-        s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
+        s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
 
         total_reward = 0.
         damage_steps = 0
@@ -185,7 +187,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             if r_t == -20:
                 damage_steps += 1
 
-            s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents, ob.racePos))
+            s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents))
 
             buff.add(s_t, a_t[0], r_t, s_t1, done)      #Add replay buffer
 

@@ -25,6 +25,8 @@ import snakeoil3_gym as snakeoil3
 
 from gym_torcs_overtake import TorcsEnv
 
+
+
 class PolicyOverOption:
     def __init__(self,option_size,epsilon,epsilon_min,epsilon_decay,critic):
         self.options = option_size
@@ -40,7 +42,7 @@ class PolicyOverOption:
         print("action values are: ",act_values)
         return np.argmax(act_values[0])  # returns action
 
-
+'''
 class IntraOptionPolicy(object): #DDPG
     def __init__(self, sess, state_size, action_size,gamma=0.999,learning_rate_intrapolicy):
         self.sess = sess
@@ -79,7 +81,7 @@ class IntraOptionPolicy(object): #DDPG
 		if np.random.random() < self.epsilon:
 			return random.randrange(self.action_size) # here should generate random numbers
 		return self.actor_model.predict(state)
-
+'''
 class Termination(object):
     def __init__(self, sess, state_size,gamma=0.999,learning_rate_termination):
         self.sess = sess
@@ -91,6 +93,31 @@ class Termination(object):
         self.s = tf.placeholder(tf.float32, [1, n_features], "state")
         self.a = tf.placeholder(tf.float32, None, name="act")
         self.td_error = tf.placeholder(tf.float32, None, name="td_error")  # TD_error
+
+        self.memory = deque(maxlen=2000)
+		self.actor_state_input, self.actor_model = self.create_actor_model()
+		_, self.target_actor_model = self.create_actor_model()
+
+		self.actor_critic_grad = tf.placeholder(tf.float32,
+			[None, self.action_size]) # where we will feed de/dC (from critic)
+
+		actor_model_weights = self.actor_model.trainable_weights
+		self.actor_grads = tf.gradients(self.actor_model.output,
+			actor_model_weights, -self.actor_critic_grad) # dC/dA (from actor)
+		grads = zip(self.actor_grads, actor_model_weights)
+		self.optimize = tf.train.AdamOptimizer(self.learning_rate).apply_gradients(grads)
+
+
+    def create_actor_model(self):
+    		state_input = Input(shape=self.state_size)
+    		h1 = Dense(200, activation='relu')(state_input)
+    		h2 = Dense(200, activation='relu')(h1)
+    		output = Dense(self.action_size, activation='sigmoid')(h2)
+
+    		model = Model(input=state_input, output=output)
+    		adam  = Adam(lr=self.learning_rate)
+    		model.compile(loss="mse", optimizer=adam)
+    		return state_input, model
 
         with tf.variable_scope('TerminationNetwork'):
             l1 = tf.layers.dense(
@@ -242,7 +269,68 @@ class OptionValueCritic:# learn Q_(s,w)
             return advantages
         return advantages[option]
 
+class OptionValueCritic:
+    def __init__(self, sess, state_size, option_size, discount, learning_rate_critic, terminations):
+        self.sess = sess
+        self.state_size = state_size
+        self.option_size = option_size
+        self.memory = deque(maxlen=2000)
+        self.lr = learning_rate_critic
+        self.discount = discount #gamma
+        self.terminations = terminations
+        self.options = option_size
 
+        self.model = self._build_model()
+        self.target_model = self._build_model()
+        self.update_target_model()
+
+
+    def _build_model(self):
+        # Neural Net for Deep-Q learning Model
+        model = Sequential()
+        model.add(Dense(200, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(200, activation='relu'))
+        model.add(Dense(self.option_size))
+        model.compile(loss = 'mse',
+                      optimizer=Adam(lr=self.learning_rate))#loss = 'mse',
+        return model
+
+    def update_target_model(self):
+        # copy weights from model to target_model
+        self.target_model.set_weights(self.model.get_weights())
+
+    def remember(self, state, option, reward, next_state, done):
+        self.memory.append((state, option, reward, next_state, done))
+
+    def replay(self, batch):
+        for state, option, reward, next_state, done in batch:
+            update_target[0][option] = reward
+            if not done:
+                next_values = self.model.predict(next_state)
+                next_termination = self.terminations[option].model.predict(next_state)
+                update_target[0][option] += self.discount*((1. - next_termination)*next_values[option] + next_termination*np.max(next_values))
+
+            self.model.fit(state, update_target, epochs=1, verbose=0)
+
+    def value(self, state, option=None):
+        value = self.model.predict(state)
+        if option is None:
+            return np.sum(value, axis=0)             # Q(s,:) = V(s)
+        return np.sum(value[option], axis=0)            # Q(s,w)
+
+    def advantage(self, state, option=None):
+        value = self.model.predict(state)
+        advantages = values - np.max(values)
+        # advantages = (1 - (1-self.discount)/self.priority) * values - self.discount * np.max(values)        # TODO
+        if option is None:
+            return advantages
+        return advantages[option]
+
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def save(self, name):
+        self.model.save_weights(name)
 
 
 class IntraOptionPolicy:
@@ -250,20 +338,69 @@ class IntraOptionPolicy:
         self.sess = sess
         self.option_behavior = option # 1 for overtaking, 2 for following
         self.actor = ActorNetwork(self.sess, args.state_size, args.state_size, args.batch_size, args.tau, args.learning_rate_actor)
-        if option == 1:
+        if option == 0:
             actor.model.load_weights("actormodel_overtaking.h5")
         else:
             actor.model.load_weights("actormodel_following.h5")
 
-    def act(self, ob):
+    def get_action(self, ob):
         s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
         a_t = self.actor.model.predict(s_t.reshape(1, s_t.shape[0]))
 
-        a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob)
+        a_t_primitive = Low_level_controller(a_t[0][0],a_t[0][1],ob)
 
         return a_t_primitive
 
 
+def Low_level_controller(delta, speed_target, ob):
+    ob_angle = ob.angle
+    ob_speedX = ob.speedX * 300
+    lateralSetPoint = delta
+    # Steer control==
+    if lateralSetPoint < -1:
+        lateralSetPoint = -1
+    elif lateralSetPoint > 1:
+        lateralSetPoint = 1
+    if speed_target < 0:
+        speed_target = 0
+    elif speed_target > 1:
+        speed_target = 1
+
+    pLateralOffset = 0.5
+    pAngleOffset = 3
+
+    action_steer = -pLateralOffset *(ob.trackPos + lateralSetPoint) + pAngleOffset * ob_angle
+
+
+    action_steer = np.tanh(action_steer)
+
+    # Throttle Control
+    MAX_SPEED = 120
+    MIN_SPEED = 10
+    target_speed = MIN_SPEED + speed_target * (MAX_SPEED - MIN_SPEED)
+
+    if ob_speedX > target_speed:
+        action_brake = - 0.1 * (target_speed - ob_speedX)
+        action_brake = np.tanh(action_brake)
+        action_accel = 0
+    else:
+        action_brake = 0
+        action_accel = 0.1 * (target_speed - ob_speedX)
+        if ob_speedX < target_speed - (action_steer*50):
+            action_accel+= .01
+        if ob_speedX < 10:
+           action_accel+= 1/(ob_speedX +.1)
+        action_accel = np.tanh(action_accel)
+
+    # Traction Control System
+    if ((ob.wheelSpinVel[2]+ob.wheelSpinVel[3]) -
+       (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
+       action_accel-= .2
+
+
+    a_t = [action_steer, action_accel, action_brake]
+
+    return a_t
 
 
 if __name__ == '__main__':
@@ -275,13 +412,13 @@ if __name__ == '__main__':
     rng = np.random.RandomState(1234) # for random number generation
 
     env = TorcsEnv(vision=args.vision, throttle=True,gear_change=False)
-
+    buff = ReplayBuffer(args.buffer_size)
 
     history = np.zeros((args.nepisodes, 2))
 
-    overtaking_policy = IntraOptionPolicy(sess,1)
+    overtaking_policy = IntraOptionPolicy(sess,0)
 
-    following_policy = IntraOptionPolicy(sess,2)
+    following_policy = IntraOptionPolicy(sess,1)
     # Define intra-option policies: fixed policy
     option_polcies = [overtaking_policy, following_policy]
 
@@ -307,7 +444,7 @@ if __name__ == '__main__':
         state = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
 
         # Choose an option based on initial states
-        option = policy.sample(state) # policy.predict or sample (states)
+        option = policy.get_option(state) # policy.predict or sample (states)
         # generate a first primitive action according to current option
         action = option_policies[option].get_actions(state)
         # action = option_policies[option].sample(phi)  # put this to primitive action loop
@@ -322,7 +459,7 @@ if __name__ == '__main__':
         for step in range(args.nsteps):
             ob, reward, done, _ = env.step(action)
             state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents, ob.racePos))
-
+            buff.add(state,option,reward,state_,done)
             # Termination might occur upon entering the new state
             if option_terminations[option].sample(phi):
                 # if terminates, get a new option based on current state
@@ -332,10 +469,11 @@ if __name__ == '__main__':
                 duration = 1
 
             # Generate primitive action for next step based on current intra-option policy
-            action = option_policies[option].get_actions(state_)
+            action = option_policies[option].get_action(ob)
 
+            batch = buff.getBatch(args.batch_size)
             # Update Option-value function and Option-action-value fuction
-            td_error = critic.learn(state, reward, state_, done)
+            td_error = critic.replay(batch)
 
             # Termination update
             termination_improvement.update(state, option, td_error)

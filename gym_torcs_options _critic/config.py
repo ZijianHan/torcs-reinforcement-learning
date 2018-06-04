@@ -32,6 +32,7 @@ parser.add_argument('--learning_rate_critic', help="learning_rate_critic", type=
 parser.add_argument('--learning_rate_termination', help="learning_rate_termination", type=float, default=0.0005)
 
 parser.add_argument('--batch_size', help="batch update size", type=int, default=32)
+parser.add_argument('--buffer_size', help="batch update size", type=int, default=100000)
 parser.add_argument('--learning_rate_actor', help="learning_rate_actor", type=float, default=0.0001)
 parser.add_argument('--tau', help="Target Network HyperParameters", type=float, default=0.001)
 
