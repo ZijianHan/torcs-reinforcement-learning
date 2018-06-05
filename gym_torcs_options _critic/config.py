@@ -8,10 +8,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--nruns', help="Number of runs", type=int, default=100)
 
 
-parser.add_argument('--baseline', help="Use the baseline for the intra-option gradient", action='store_true', default=True)
-parser.add_argument('--temperature', help="Temperature parameter for softmax", type=float, default=1e-2)
-parser.add_argument('--primitive', help="Augment with primitive", default=False, action='store_true')
-parser.add_argument('--priority', help="Priority of discount ratio between keep and terminate an option", type=float, default=1.0)
 
 parser.add_argument('--vision', help="If activate vision input of torcs", type=bool, default=False)
 parser.add_argument('--output_graph', help="Output graph of tensorflow", type=bool, default=True)
@@ -36,6 +32,7 @@ parser.add_argument('--batch_size', help="batch update size", type=int, default=
 parser.add_argument('--buffer_size', help="batch update size", type=int, default=100000)
 parser.add_argument('--learning_rate_actor', help="learning_rate_actor", type=float, default=0.0001)
 parser.add_argument('--tau', help="Target Network HyperParameters", type=float, default=0.001)
+parser.add_argument('--max_option_duration', help="max_option_duration", type=int, default=30)
 
 
 args = parser.parse_args()

@@ -27,22 +27,6 @@ from gym_torcs_overtake import TorcsEnv
 
 
 
-class PolicyOverOption:
-    def __init__(self,option_size,epsilon,epsilon_min,epsilon_decay,critic):
-        self.options = option_size
-        self.epsilon = epsilon  # exploration rate
-        self.epsilon_min = epsilon_min
-        self.epsilon_decay = epsilon_decay
-        self.critic = critic
-
-    def get_option(self,state):
-        if np.random.rand() <= self.epsilon:
-            return random.randrange(self.options)
-        act_values = self.critic.value(state) # get Q(s,:)
-        print("action values are: ",act_values)
-        return np.argmax(act_values[0])  # returns action
-
-
 class OptionValueCritic:
     def __init__(self, sess, state_size, option_size, discount, learning_rate_critic,epsilon,epsilon_min,epsilon_decay):
         self.sess = sess
@@ -81,19 +65,23 @@ class OptionValueCritic:
 
     def replay(self, batch):
         for state, option, reward, next_state, done in batch:
-            update_target[0][option] = reward
-            if not done:
+            state = np.reshape(state, [1, self.state_size])
+            next_state = np.reshape(next_state, [1, self.state_size])
+            update_target = self.model.predict(state)
+            if done:
+                update_target[0][option] = reward
+            else:
                 next_values = self.model.predict(next_state)
-                if next_values[option] == np.max(next_values):
+                if next_values[0][option] == np.max(next_values):
                     next_termination = 0
                 else:
                     next_termination = 1
-                update_target[0][option] += self.discount*((1. - next_termination)*next_values[option] + next_termination*np.max(next_values))
+                update_target[0][option] = reward + self.discount*((1. - next_termination)*next_values[0][option] + next_termination*np.max(next_values[0]))
 
             self.model.fit(state, update_target, epochs=1, verbose=0)
 
     def value(self, state, option=None):
-        value = self.model.predict(state)
+        value = self.model.predict(state)[0]
         if option is None:
             return np.sum(value, axis=0)             # Q(s,:) = V(s)
         return np.sum(value[option], axis=0)            # Q(s,w)
@@ -101,6 +89,7 @@ class OptionValueCritic:
     def advantage(self, state, option=None):
         value = self.model.predict(state)
         advantages = values - np.max(values)
+
         if option is None:
             return advantages
         return advantages[option]
@@ -110,14 +99,14 @@ class OptionValueCritic:
         print("action values are: ",act_values)
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.options)
-
-
-        return np.argmax(act_values[0])  # returns action
+        else:
+            return np.argmax(act_values[0])  # returns action
 
     def terminate(self,state,option):
         print(state.shape)
         value = self.model.predict(state)
-        if value[option] == np.max(value):
+        print("value is",value)
+        if value[0][option] == np.max(value):
             return 0
         else:
             return 1
@@ -237,10 +226,9 @@ if __name__ == '__main__':
 
     following_policy = IntraOptionPolicy(sess,1)
     # Define intra-option policies: fixed policy
-    option_polcies = [overtaking_policy, following_policy]
+    option_policies = [overtaking_policy, following_policy]
 
     # Define option-value function Q_Omega(s,omega): estimate values upon arrival
-    print(args.state_size)
     critic = OptionValueCritic(sess, args.state_size, args.option_size, args.discount, args.learning_rate_critic,args.epsilon,args.epsilon_min,args.epsilon_decay)
     '''
     try:
@@ -256,29 +244,32 @@ if __name__ == '__main__':
         state = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
 
         # Choose an option based on initial states
-        option = critic.get_option(state) # policy.predict or sample (states)
+        option = critic.get_option(state.reshape(1, state.shape[0])) # policy.predict or sample (states)
 
         # generate a first primitive action according to current option
-        action = option_polcies[option].get_action(ob)
+        action = option_policies[option].get_action(ob)
 
 
         cumreward = 0.
         duration = 1
         option_switches = 0
         avgduration = 0.
+        reward_option = 0
 
         for step in range(args.nsteps):
-            ob, reward, done, _ = env.step(action)
+
+            ob, r_t_primitive, done, _ = env.step(action)
             state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
-            buff.add(state,option,reward,state_,done)
+            reward_option = reward_option + args.discount**(duration-1)*r_t_primitive
+            buff.add(state,option,reward_option,state_,done)
             # Termination might occur upon entering the new state
-            print("state is: ",state)
-            if (critic.terminate(state,option)==1):
+            if (critic.terminate(state.reshape(1, state.shape[0]),option)==1 or duration >= args.max_option_duration):
                 # if terminates, get a new option based on current state
-                option = critic.get_action(state_)
+                option = critic.get_option(state_.reshape(1, state_.shape[0]))
                 option_switches += 1
                 avgduration += (1./option_switches)*(duration - avgduration)
                 duration = 1
+                reward_option = 0
 
             # Generate primitive action for next step based on current intra-option policy
             action = option_policies[option].get_action(ob)
@@ -289,7 +280,7 @@ if __name__ == '__main__':
 
             state = state_
 
-            cumreward += reward
+            cumreward += r_t_primitive
             duration += 1
             if done:
                 break
