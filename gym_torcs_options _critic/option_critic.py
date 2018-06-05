@@ -90,10 +90,6 @@ class Termination(object):
         self.gamma = gamma    # discount rate
         self.learning_rate = learning_rate_termination
 
-        self.s = tf.placeholder(tf.float32, [1, n_features], "state")
-        self.a = tf.placeholder(tf.float32, None, name="act")
-        self.td_error = tf.placeholder(tf.float32, None, name="td_error")  # TD_error
-
         self.memory = deque(maxlen=2000)
 		self.actor_state_input, self.actor_model = self.create_actor_model()
 		_, self.target_actor_model = self.create_actor_model()
@@ -102,10 +98,13 @@ class Termination(object):
 			[None, self.action_size]) # where we will feed de/dC (from critic)
 
 		actor_model_weights = self.actor_model.trainable_weights
-		self.actor_grads = tf.gradients(self.actor_model.output,
-			actor_model_weights, -self.actor_critic_grad) # dC/dA (from actor)
-		grads = zip(self.actor_grads, actor_model_weights)
-		self.optimize = tf.train.AdamOptimizer(self.learning_rate).apply_gradients(grads)
+        with tf.name_scope('loss'):
+            # to maximize total reward (log_p * R) is to minimize -(log_p * R), and the tf only have minimize(loss)
+            #neg_log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=all_act, labels=self.tf_acts)   # this is negative log of chosen action
+            # or in this way:
+            neg_log_prob = tf.reduce_sum(-tf.log(self.all_act_prob)*tf.one_hot(self.tf_acts, self.n_actions), axis=1)
+        loss = tf.reduce_mean(neg_log_prob * self.tf_vt)  # reward guided loss
+        self.optimize = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
 
 
     def create_actor_model(self):
@@ -119,33 +118,7 @@ class Termination(object):
     		model.compile(loss="mse", optimizer=adam)
     		return state_input, model
 
-        with tf.variable_scope('TerminationNetwork'):
-            l1 = tf.layers.dense(
-                inputs=self.s,
-                units=200,  # number of hidden units
-                activation=tf.nn.relu,
-                kernel_initializer=tf.random_normal_initializer(0., .1),  # weights
-                bias_initializer=tf.constant_initializer(0.1),  # biases
-                name='l1'
-            )
 
-            l2 = tf.layers.dense(
-                inputs=l1,
-                units=200,  # number of hidden units
-                activation=tf.nn.relu,
-                kernel_initializer=tf.random_normal_initializer(0., .1),  # weights
-                bias_initializer=tf.constant_initializer(0.1),  # biases
-                name='l2'
-            )
-
-            ter_prob = tf.layers.dense(
-                inputs=l2,
-                units=1,  # number of hidden units
-                activation=tf.nn.sigmoid,
-                kernel_initializer=tf.random_normal_initializer(0., .1),  # weights
-                bias_initializer=tf.constant_initializer(0.1),  # biases
-                name='ter_prob'
-            )
         with tf.variable_scope('exp_v'):
             log_prob = tf.log(ter_prob)
             self.exp_v = tf.reduce_mean(log_prob * self.td_error)  # advantage (TD_error) guided loss
@@ -154,7 +127,19 @@ class Termination(object):
             self.train_op = tf.train.AdamOptimizer(lr).minimize(self.exp_v)  # minimize(-exp_v) = maximize(exp_v)
 
 
-    def train(self, state,critic_grad):
+    def replay(self, batch, critic):
+        for state, option, reward, next_state, done in batch:
+            predicted_action = self.
+        for sample in samples:
+			cur_state, option, reward, new_state, _ = sample
+			predicted_action = int(np.random.random() < self.actor_model.predict(cur_state))
+			advantage = critic.advantage(cur_state,predicted_action)
+
+			self.sess.run(self.optimize, feed_dict={
+				self.actor_state_input: cur_state,
+				self.actor_critic_grad: grads
+			})
+
 		self.sess.run(self.optimize, feed_dict={
 			self.actor_state_input: state,
 			self.actor_critic_grad: grads
@@ -176,7 +161,7 @@ class TerminationGradient:
 
     def update(self, state, option, td_error):
         self.terminations[option].train(state,td_error)
-
+'''
 class OptionValueCritic:# learn Q_(s,w)
     def __init__(self, sess, state_size, option_size, discount, learning_rate_critic, terminations):
         self.sess = sess
@@ -268,7 +253,7 @@ class OptionValueCritic:# learn Q_(s,w)
         if option is None:
             return advantages
         return advantages[option]
-
+'''
 class OptionValueCritic:
     def __init__(self, sess, state_size, option_size, discount, learning_rate_critic, terminations):
         self.sess = sess
@@ -352,7 +337,7 @@ class IntraOptionPolicy:
         return a_t_primitive
 
 
-def Low_level_controller(delta, speed_target, ob):
+def Low_level_controller(delta, speed_target, ob, safety_constrain = True):
     ob_angle = ob.angle
     ob_speedX = ob.speedX * 300
     lateralSetPoint = delta
@@ -396,7 +381,23 @@ def Low_level_controller(delta, speed_target, ob):
     if ((ob.wheelSpinVel[2]+ob.wheelSpinVel[3]) -
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
+    safety_distance_long = 15/200
+    safety_distance_lat = 15/200
+    #print(ob.opponents)
 
+    if (safety_constrain):
+        for i in range(6):
+            if ob.opponents[i+14] < safety_distance_long:
+                action_accel = 0
+                action_brake = 0.2
+                print("Frontal collision warning")
+
+        for j in range(8):
+            print(ob.opponents[j+22])
+            if ob.opponents[j+22] < safety_distance_lat:
+                #action_steer += 0.2
+                action_steer += 0.5*(15-(ob.opponents[j+22] * 200))/15
+                print("Side collision warning")
 
     a_t = [action_steer, action_accel, action_brake]
 
@@ -427,7 +428,8 @@ if __name__ == '__main__':
 
     # Define option-value function Q_Omega(s,omega): estimate values upon arrival
     critic = OptionValueCritic(sess, args.state_size, args.option_size, args.discount, args.learning_rate_critic, option_terminations)
-
+    try:
+        critic.model.load_weights("option_value_model.h5")
     # Define policy over options: softmax option policy
     policy = PolicyOverOption(args.noptions,args.epsilon,args.epsilon_min,args.epsilon_decay,critic)
     #policy = SoftmaxPolicy(rng, nfeatures, args.noptions, args.temperature)

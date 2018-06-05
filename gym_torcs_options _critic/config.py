@@ -15,12 +15,13 @@ parser.add_argument('--priority', help="Priority of discount ratio between keep 
 
 parser.add_argument('--vision', help="If activate vision input of torcs", type=bool, default=False)
 parser.add_argument('--output_graph', help="Output graph of tensorflow", type=bool, default=True)
-parser.add_argument('--noptions', help='Number of options', type=int, default=2)
+parser.add_argument('--option_size', help='Number of options', type=int, default=2)
 parser.add_argument('--nepisodes', help="Number of episodes per run", type=int, default=1000)
 parser.add_argument('--nsteps', help="Maximum number of steps per episode", type=int, default=500)
 parser.add_argument('--discount', help='Discount factor', type=float, default=0.999)
 parser.add_argument('--epsilon', help="Factor on randomness start point", type=float, default=1.0)
 parser.add_argument('--epsilon_decay', help="Decay on randomness", type=float, default=0.995)
+parser.add_argument('--epsilon_min', help="Minimal epsilon", type=float, default=0.05)
 parser.add_argument('--lr_term', help="Termination gradient learning rate", type=float, default=0.25)
 parser.add_argument('--lr_intra', help="Intra-option gradient learning rate", type=float, default=0.25)
 parser.add_argument('--lr_critic', help="Learning rate", type=float, default=0.5)
@@ -39,4 +40,4 @@ parser.add_argument('--tau', help="Target Network HyperParameters", type=float, 
 
 args = parser.parse_args()
 fname = '-'.join(['{}_{}'.format(param, val) for param, val in sorted(vars(args).items())])
-fname = 'optioncritic-fourrooms-' + fname + '.npy'
+fname = 'optioncritic-' + fname + '.npy'
