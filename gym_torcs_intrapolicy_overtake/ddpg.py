@@ -152,9 +152,9 @@ def playGame(train_indicator=0, safety_constrain_flag = True):    #1 means Train
             json.dump(critic.model.to_json(), outfile)
 
     try:
-        actor.model.load_weights("actormodel.h5")
+        actor.model.load_weights("actormodel_overtaking.h5")
         critic.model.load_weights("criticmodel.h5")
-        actor.target_model.load_weights("actormodel.h5")
+        actor.target_model.load_weights("actormodel_overtaking.h5")
         critic.target_model.load_weights("criticmodel.h5")
         print("Weight load successfully")
     except:

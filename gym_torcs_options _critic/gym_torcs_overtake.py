@@ -13,7 +13,7 @@ import time
 class TorcsEnv:
     terminal_judge_start = 100  # Speed limit is applied after this step
     termination_limit_progress = 5  # [km/h], episode terminates if car is running slower than this limit
-    default_speed = 100
+    default_speed = 120
 
     initial_reset = True
 
@@ -23,7 +23,7 @@ class TorcsEnv:
         self.vision = vision
         self.throttle = throttle
         self.gear_change = gear_change
-        self.default_speed = 100
+        self.default_speed = 120
         self.initial_run = True
 
         ##print("launch torcs")
@@ -159,8 +159,8 @@ class TorcsEnv:
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
             reward = -10.0
-            episode_terminate = True
-            client.R.d['meta'] = True
+            #episode_terminate = True
+            #client.R.d['meta'] = True
 
         # Termination judgement #########################
 

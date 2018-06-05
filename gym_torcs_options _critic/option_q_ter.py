@@ -15,8 +15,6 @@ from keras.layers import Dense
 from keras.optimizers import Adam
 from keras import backend as K
 
-from scipy.special import expit
-from scipy.misc import logsumexp
 
 from ReplayBuffer import ReplayBuffer
 from ActorNetwork import ActorNetwork
@@ -28,8 +26,8 @@ from gym_torcs_overtake import TorcsEnv
 
 
 class OptionValueCritic:
-    def __init__(self, sess, state_size, option_size, discount, learning_rate_critic,epsilon,epsilon_min,epsilon_decay):
-        self.sess = sess
+    def __init__(self, state_size, option_size, discount, learning_rate_critic,epsilon,epsilon_min,epsilon_decay):
+        #self.sess = sess
         self.state_size = state_size
         self.option_size = option_size
         self.memory = deque(maxlen=2000)
@@ -43,7 +41,7 @@ class OptionValueCritic:
         self.model = self._build_model()
         self.target_model = self._build_model()
         self.update_target_model()
-        self.sess.run(tf.global_variables_initializer())
+        #self.sess.run(tf.global_variables_initializer())
 
 
     def _build_model(self):
@@ -79,6 +77,8 @@ class OptionValueCritic:
                 update_target[0][option] = reward + self.discount*((1. - next_termination)*next_values[0][option] + next_termination*np.max(next_values[0]))
 
             self.model.fit(state, update_target, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
 
     def value(self, state, option=None):
         value = self.model.predict(state)[0]
@@ -103,9 +103,7 @@ class OptionValueCritic:
             return np.argmax(act_values[0])  # returns action
 
     def terminate(self,state,option):
-        print(state.shape)
         value = self.model.predict(state)
-        print("value is",value)
         if value[0][option] == np.max(value):
             return 0
         else:
@@ -119,20 +117,30 @@ class OptionValueCritic:
 
 
 class IntraOptionPolicy:
-    def __init__(self, sess, option):
+    def __init__(self, sess):
         self.sess = sess
-        self.option_behavior = option # 1 for overtaking, 2 for following
-        self.actor = ActorNetwork(self.sess, args.state_size, args.state_size, args.batch_size, args.tau, args.learning_rate_actor)
+        #self.option_behavior = option # 0 for overtaking, 1 for following
+        self.actor = ActorNetwork(self.sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
+        #self.sess.run(tf.global_variables_initializer())
+    def load_weights(self,option):
         if option == 0:
-            self.actor.model.load_weights("actormodel_overtaking.h5")
+            try:
+                self.actor.model.load_weights("actormodel_overtaking.h5")
+                self.actor.target_model.load_weights("actormodel_overtaking.h5")
+                print("Overtaking Weight load successfully")
+            except:
+                print("Cannot find the overtaking weight")
         else:
             self.actor.model.load_weights("actormodel_following.h5")
+            self.actor.target_model.load_weights("actormodel_following.h5")
+
+
 
     def get_action(self, ob):
         s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
         a_t = self.actor.model.predict(s_t.reshape(1, s_t.shape[0]))
-
-        a_t_primitive = Low_level_controller(a_t[0][0],a_t[0][1],ob, True)
+        print("Delta: {}, Target speed: {}".format(a_t[0][0],a_t[0][1]))
+        a_t_primitive = Low_level_controller(a_t[0][0],a_t[0][1],ob, False)
 
         return a_t_primitive
 
@@ -204,32 +212,42 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain = True):
 
 
 if __name__ == '__main__':
+    plt.ion()
+    plt.show()
     #Tensorflow GPU optimization
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
-    sess = tf.Session(config=config)
-    from keras import backend as K
-    K.set_session(sess)
+    sess = tf.Session()
 
 
     args = parser.parse_args()
 
 
-    rng = np.random.RandomState(1234) # for random number generation
-
     env = TorcsEnv(vision=args.vision, throttle=True,gear_change=False)
-    buff = ReplayBuffer(args.buffer_size)
+    #buff = ReplayBuffer(args.buffer_size)
 
     history = np.zeros((args.nepisodes, 2))
 
-    overtaking_policy = IntraOptionPolicy(sess,0)
+    #overtaking_policy = IntraOptionPolicy(sess)
+    #overtaking_policy.load_weights(0)
 
-    following_policy = IntraOptionPolicy(sess,1)
+    overtaking_policy = ActorNetwork(sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
+    overtaking_policy.model.load_weights("actormodel_overtaking.h5")
+    overtaking_policy.target_model.load_weights("actormodel_overtaking.h5")
+
+
+    #following_policy = IntraOptionPolicy(sess)
+    #following_policy.load_weights(1)
+
+    following_policy = ActorNetwork(sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
+    following_policy.model.load_weights("actormodel_following.h5")
+    following_policy.target_model.load_weights("actormodel_following.h5")
+
     # Define intra-option policies: fixed policy
     option_policies = [overtaking_policy, following_policy]
 
     # Define option-value function Q_Omega(s,omega): estimate values upon arrival
-    critic = OptionValueCritic(sess, args.state_size, args.option_size, args.discount, args.learning_rate_critic,args.epsilon,args.epsilon_min,args.epsilon_decay)
+    #critic = OptionValueCritic(args.state_size, args.option_size, args.discount, args.learning_rate_critic,args.epsilon,args.epsilon_min,args.epsilon_decay)
     '''
     try:
         critic.load("option_value_model.h5")
@@ -244,10 +262,12 @@ if __name__ == '__main__':
         state = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
 
         # Choose an option based on initial states
-        option = critic.get_option(state.reshape(1, state.shape[0])) # policy.predict or sample (states)
+        option = 0 #critic.get_option(state.reshape(1, state.shape[0])) # policy.predict or sample (states)
 
         # generate a first primitive action according to current option
-        action = option_policies[option].get_action(ob)
+        #action = option_policies[option].get_action(ob)
+        action = option_policies[option].model.predict(state.reshape(1, state.shape[0]))
+        action = Low_level_controller(action[0][0],action[0][1],ob, False)
 
 
         cumreward = 0.
@@ -257,37 +277,57 @@ if __name__ == '__main__':
         reward_option = 0
 
         for step in range(args.nsteps):
-
+            print("Step:{} Option: {} Action:{}".format(step,option,action))
             ob, r_t_primitive, done, _ = env.step(action)
             state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
-            reward_option = reward_option + args.discount**(duration-1)*r_t_primitive
-            buff.add(state,option,reward_option,state_,done)
+            #reward_option = reward_option + args.discount**(duration-1)*r_t_primitive
+            '''
+            buff.add(state,option,r_t_primitive,state_,done)
             # Termination might occur upon entering the new state
             if (critic.terminate(state.reshape(1, state.shape[0]),option)==1 or duration >= args.max_option_duration):
                 # if terminates, get a new option based on current state
-                option = critic.get_option(state_.reshape(1, state_.shape[0]))
+                option = 0 #critic.get_option(state_.reshape(1, state_.shape[0]))
                 option_switches += 1
                 avgduration += (1./option_switches)*(duration - avgduration)
                 duration = 1
-                reward_option = 0
+                #reward_option = 0
 
             # Generate primitive action for next step based on current intra-option policy
-            action = option_policies[option].get_action(ob)
-
+            '''
+            #action = option_policies[0].get_action(ob)
+            action = option_policies[option].model.predict(state.reshape(1, state.shape[0]))
+            action = Low_level_controller(action[0][0],action[0][1],ob, False)
+            '''
             batch = buff.getBatch(args.batch_size)
             # Update Option-value function and Option-action-value fuction
             critic.replay(batch)
-
+            '''
             state = state_
 
             cumreward += r_t_primitive
             duration += 1
             if done:
                 break
-        if episode % 10 == 0:
-            critic.save("option_value_model.h5")
+        #if episode % 10 == 0:
+        #    critic.save("option_value_model.h5")
 
         history[episode, 0] = step
         history[episode, 1] = avgduration
 
-    print('nstep {}   duration {}'.format(np.mean(history[:,0]), np.mean(history[:,1])) )
+        plt.figure(1)
+        plt.hold(True)
+        plt.subplot(211)
+        plt.plot(episode,cumreward,'ro')
+        plt.xlabel('episode')
+        plt.ylabel('Total reward per epsiode')
+        plt.subplot(212)
+        plt.hold(True)
+        plt.plot(episode,avgduration,'bo')
+        plt.xlabel('episode')
+        plt.ylabel('avgduration')
+        plt.draw()
+        plt.show()
+        plt.pause(0.001)
+
+    env,end()
+    print("Finish.")
