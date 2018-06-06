@@ -16,12 +16,10 @@ from keras.optimizers import Adam
 from keras import backend as K
 
 from ReplayBuffer import ReplayBuffer
-from OvertakingNetwork import OvertakingNetwork
-from FollowingNetwork import FollowingNetwork
 from ActorNetwork import ActorNetwork
 import snakeoil3_gym as snakeoil3
 
-from gym_torcs_overtake import TorcsEnv
+from gym_torcs import TorcsEnv
 
 
 class OptionValueCritic:
@@ -194,8 +192,8 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
     K.set_session(sess)
 
     # Define two intra-policies
-    overtaking_policy = OvertakingNetwork(sess, args.state_size, args.action_size)
-    following_policy = FollowingNetwork(sess, args.state_size, args.action_size)
+    overtaking_policy = ActorNetwork(sess, args.state_size, args.action_size)
+    following_policy = ActorNetwork(sess, args.state_size, args.action_size)
     try:
         overtaking_policy.model.load_weights("actormodel_overtaking.h5")
         overtaking_policy.target_model.load_weights("actormodel_overtaking.h5")
@@ -239,7 +237,7 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
         # generate a first primitive action according to current option
 
         for step in range(args.nsteps):
-            action = option_policies[1].model.predict(state.reshape(1, state.shape[0]))
+            action = option_policies[0].model.predict(state.reshape(1, state.shape[0]))
             action = Low_level_controller(action[0][0],action[0][1],ob, safety_constrain_flag)
 
             print("Step:{} Option: {} Action:{}".format(step,option,action))
