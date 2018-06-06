@@ -17,8 +17,9 @@ from keras import backend as K
 
 
 from ReplayBuffer import ReplayBuffer
+from OvertakingNetwork import OvertakingNetwork
+from FollowingNetwork import FollowingNetwork
 from ActorNetwork import ActorNetwork
-from CriticNetwork import CriticNetwork
 import snakeoil3_gym as snakeoil3
 
 from gym_torcs_overtake import TorcsEnv
@@ -231,17 +232,17 @@ if __name__ == '__main__':
     #overtaking_policy = IntraOptionPolicy(sess)
     #overtaking_policy.load_weights(0)
 
-    overtaking_policy = ActorNetwork(sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
-    overtaking_policy.model.load_weights("actormodel_overtaking.h5")
-    overtaking_policy.target_model.load_weights("actormodel_overtaking.h5")
+    overtaking_policy = OvertakingNetwork(sess, args.state_size, args.action_size)
+    following_policy = FollowingNetwork(sess, args.state_size, args.action_size)
 
-
-    #following_policy = IntraOptionPolicy(sess)
-    #following_policy.load_weights(1)
-
-    following_policy = ActorNetwork(sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
-    following_policy.model.load_weights("actormodel_following.h5")
-    following_policy.target_model.load_weights("actormodel_following.h5")
+    try:
+        overtaking_policy.model.load_weights("actormodel_overtaking.h5")
+        overtaking_policy.target_model.load_weights("actormodel_overtaking.h5")
+        following_policy.model.load_weights("actormodel_following.h5")
+        following_policy.target_model.load_weights("actormodel_following.h5")
+        print("Weight load successfully")
+    except:
+        print("Cannot find the weight")
 
     # Define intra-option policies: fixed policy
     option_policies = [overtaking_policy, following_policy]

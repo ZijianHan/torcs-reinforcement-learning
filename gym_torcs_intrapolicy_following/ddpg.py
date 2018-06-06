@@ -21,7 +21,7 @@ import timeit
 import snakeoil3_gym as snakeoil3
 
 OU = OU()       #Ornstein-Uhlenbeck Process
-def Get_actions(delta, speed_target, ob):
+def Get_actions(delta, speed_target, ob, safety_constrain = True):
     ob_angle = ob.angle
     ob_speedX = ob.speedX * 300
     lateralSetPoint = delta
@@ -44,7 +44,7 @@ def Get_actions(delta, speed_target, ob):
     action_steer = np.tanh(action_steer)
 
     # Throttle Control
-    MAX_SPEED = 100
+    MAX_SPEED = 120
     MIN_SPEED = 10
     target_speed = MIN_SPEED + speed_target * (MAX_SPEED - MIN_SPEED)
 
@@ -54,7 +54,7 @@ def Get_actions(delta, speed_target, ob):
         action_accel = 0
     else:
         action_brake = 0
-        action_accel = 0.05 * (target_speed - ob_speedX)
+        action_accel = 0.1 * (target_speed - ob_speedX)
         if ob_speedX < target_speed - (action_steer*50):
             action_accel+= .01
         if ob_speedX < 10:
@@ -65,14 +65,25 @@ def Get_actions(delta, speed_target, ob):
     if ((ob.wheelSpinVel[2]+ob.wheelSpinVel[3]) -
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
+    safety_distance_long = 15/200
+    safety_distance_lat = 15/200
+    #print(ob.opponents)
 
+    if (safety_constrain):
+        for i in range(6):
+            if ob.opponents[i+14] < safety_distance_long:
+                action_accel = 0
+                action_brake = 0.2
+                print("Frontal collision warning")
+
+        for j in range(8):
+            if ob.opponents[j+22] < safety_distance_lat:
+                #action_steer += 0.2
+                action_steer += 0.5*(15-(ob.opponents[j+22] * 200))/15
+                print("Side collision warning")
 
     a_t = [action_steer, action_accel, action_brake]
-    #print('actual speed is:',ob_speedX)
-    #print('target_speed is:',speed_target, ';',target_speed)
-    print('steer:', action_steer,delta)
-    #print('accel:',action_accel)
-    #print('brake:',action_brake)
+
     return a_t
 
 def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
@@ -174,7 +185,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
             a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
 
-            a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob)
+            a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob,False)
 
             ob, r_t, done, info = env.step(a_t_primitive)
 

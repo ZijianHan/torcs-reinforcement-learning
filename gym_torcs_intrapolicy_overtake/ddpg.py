@@ -96,7 +96,7 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     #print('accel:',action_accel)
     #print('brake:',action_brake)
     return a_t
-def playGame(train_indicator=0, safety_constrain_flag = True):    #1 means Train, 0 means simply Run
+def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Train, 0 means simply Run
     initialization = 0
     episode_trained = 0
     BUFFER_SIZE = 100000

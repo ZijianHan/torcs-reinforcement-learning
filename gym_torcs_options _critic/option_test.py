@@ -16,39 +16,103 @@ from keras.optimizers import Adam
 from keras import backend as K
 
 from ReplayBuffer import ReplayBuffer
+from OvertakingNetwork import OvertakingNetwork
+from FollowingNetwork import FollowingNetwork
 from ActorNetwork import ActorNetwork
-from CriticNetwork import CriticNetwork
 import snakeoil3_gym as snakeoil3
 
 from gym_torcs_overtake import TorcsEnv
 
-class IntraOptionPolicy:
-    def __init__(self, sess, option):
-        self.sess = sess
-        self.option_behavior = option # 0 for overtaking, 1 for following
-        self.actor = ActorNetwork(self.sess, 65, 3, 32, 0.001, 0.001)
-        if option == 0:
-            try:
-                self.actor.model.load_weights("actormodel_overtaking.h5")
-                self.actor.target_model.load_weights("actormodel_overtaking.h5")
-                print("Overtaking Weight load successfully")
-            except:
-                print("Cannot find the overtaking weight")
+
+class OptionValueCritic:
+    def __init__(self, state_size, option_size, discount, learning_rate_critic,epsilon,epsilon_min,epsilon_decay):
+        #self.sess = sess
+        self.state_size = state_size
+        self.option_size = option_size
+        self.memory = deque(maxlen=2000)
+        self.learning_rate = learning_rate_critic
+        self.discount = discount #gamma
+        self.options = option_size
+        self.epsilon = epsilon  # exploration rate
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+
+        self.model = self._build_model()
+        self.target_model = self._build_model()
+        self.update_target_model()
+        #self.sess.run(tf.global_variables_initializer())
+
+
+    def _build_model(self):
+        # Neural Net for Deep-Q learning Model
+        model = Sequential()
+        model.add(Dense(200, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(200, activation='relu'))
+        model.add(Dense(self.option_size))
+        model.compile(loss = 'mse',
+                      optimizer=Adam(lr=self.learning_rate))#loss = 'mse',
+        return model
+
+    def update_target_model(self):
+        # copy weights from model to target_model
+        self.target_model.set_weights(self.model.get_weights())
+
+    def remember(self, state, option, reward, next_state, done):
+        self.memory.append((state, option, reward, next_state, done))
+
+    def replay(self, batch):
+        for state, option, reward, next_state, done in batch:
+            state = np.reshape(state, [1, self.state_size])
+            next_state = np.reshape(next_state, [1, self.state_size])
+            update_target = self.model.predict(state)
+            if done:
+                update_target[0][option] = reward
+            else:
+                next_values = self.model.predict(next_state)
+                if next_values[0][option] == np.max(next_values):
+                    next_termination = 0
+                else:
+                    next_termination = 1
+                update_target[0][option] = reward + self.discount*((1. - next_termination)*next_values[0][option] + next_termination*np.max(next_values[0]))
+
+            self.model.fit(state, update_target, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def value(self, state, option=None):
+        value = self.model.predict(state)[0]
+        if option is None:
+            return np.sum(value, axis=0)             # Q(s,:) = V(s)
+        return np.sum(value[option], axis=0)            # Q(s,w)
+
+    def advantage(self, state, option=None):
+        value = self.model.predict(state)
+        advantages = values - np.max(values)
+
+        if option is None:
+            return advantages
+        return advantages[option]
+
+    def get_option(self,state):
+        act_values = self.model.predict(state) # get Q(s,:)
+        print("action values are: ",act_values)
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.options)
         else:
-            self.actor.model.load_weights("actormodel_following.h5")
-            self.actor.target_model.load_weights("actormodel_following.h5")
+            return np.argmax(act_values[0])  # returns action
 
-        self.sess.run(tf.global_variables_initializer())
+    def terminate(self,state,option):
+        value = self.model.predict(state)
+        if value[0][option] == np.max(value):
+            return 0
+        else:
+            return 1
 
-    def get_action(self, ob):
-        s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
-        state = s_t.reshape(1, s_t.shape[0])
-        print("state feedin is :",state)
-        a_t = self.actor.model.predict(state)
-        print("Delta: {}, Target speed: {}".format(a_t[0][0],a_t[0][1]))
-        a_t_primitive = Low_level_controller(a_t[0][0],a_t[0][1],ob, False)
+    def load(self, name):
+        self.model.load_weights(name)
 
-        return a_t_primitive
+    def save(self, name):
+        self.model.save_weights(name)
 
 
 def Low_level_controller(delta, speed_target, ob, safety_constrain = True):
@@ -116,38 +180,84 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain = True):
 
     return a_t
 
-
-if __name__ == '__main__':
-    sess = tf.Session()
-
+def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Train, 0 means simply Run
+    plt.ion()
     args = parser.parse_args()
 
+    np.random.seed(1337)
+
+    #Tensorflow GPU optimization
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    sess = tf.Session(config=config)
+    from keras import backend as K
+    K.set_session(sess)
+
+    # Define two intra-policies
+    overtaking_policy = OvertakingNetwork(sess, args.state_size, args.action_size)
+    following_policy = FollowingNetwork(sess, args.state_size, args.action_size)
+    try:
+        overtaking_policy.model.load_weights("actormodel_overtaking.h5")
+        overtaking_policy.target_model.load_weights("actormodel_overtaking.h5")
+        following_policy.model.load_weights("actormodel_following.h5")
+        following_policy.target_model.load_weights("actormodel_following.h5")
+        print("Weight load successfully")
+    except:
+        print("Cannot find the weight")
+
+    option_policies = [overtaking_policy, following_policy]
+
+    history = np.zeros((args.nepisodes, 2))
+
+    # Define a buffer space to store samples
+    buff = ReplayBuffer(args.buffer_size)    #Create replay buffer
+
+    # Generate a Torcs environment
     env = TorcsEnv(vision=args.vision, throttle=True,gear_change=False)
 
-    overtaking_policy = ActorNetwork(sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
-    overtaking_policy.model.load_weights("actormodel_overtaking.h5")
-    overtaking_policy.target_model.load_weights("actormodel_overtaking.h5")
-    following_policy = ActorNetwork(sess, args.state_size, args.action_size, args.batch_size, args.tau, args.learning_rate_actor)
-    following_policy.model.load_weights("actormodel_following.h5")
-    following_policy.target_model.load_weights("actormodel_following.h5")
-    option_policies = [overtaking_policy,following_policy]
+    print("TORCS Experiment Start.")
+
     for episode in range(args.nepisodes):
-        ob = env.reset(relaunch=True)
+        # Define variables to store values
+        cumreward = 0.
+        duration = 1
+        option_switches = 0
+        avgduration = 0.
+        reward_option = 0
+        damage_steps = 0
+
+        if np.mod(episode, 3) == 0:
+            ob = env.reset(relaunch=True)   #relaunch TORCS every 3 episode because of the memory leak error
+        else:
+            ob = env.reset()
+
+
         state = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
         # Choose an option based on initial states
-        option = 0
+        option = 0 #critic.get_option(state.reshape(1, state.shape[0])) # policy.predict or sample (states)
+
         # generate a first primitive action according to current option
-        #action = option_policies[option].get_action(ob)
-        action = option_policies[option].model.predict(state.reshape(1, state.shape[0]))
-        action = Low_level_controller(action[0][0],action[0][1],ob, False)
+
         for step in range(args.nsteps):
+            action = option_policies[1].model.predict(state.reshape(1, state.shape[0]))
+            action = Low_level_controller(action[0][0],action[0][1],ob, safety_constrain_flag)
+
+            print("Step:{} Option: {} Action:{}".format(step,option,action))
             ob, r_t_primitive, done, _ = env.step(action)
             state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
-            #action = option_policies[0].get_action(ob)
-            action = option_policies[option].model.predict(state.reshape(1, state.shape[0]))
-            action = Low_level_controller(action[0][0],action[0][1],ob, False)
             state = state_
+
+            cumreward += r_t_primitive
+            duration += 1
             if done:
                 break
-    env,end()
+
+
+
+    env.end()  # This is for shutting down TORCS
+
     print("Finish.")
+
+
+if __name__ == '__main__':
+    playGame()
