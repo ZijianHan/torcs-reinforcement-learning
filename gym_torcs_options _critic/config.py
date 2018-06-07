@@ -13,7 +13,7 @@ parser.add_argument('--vision', help="If activate vision input of torcs", type=b
 parser.add_argument('--output_graph', help="Output graph of tensorflow", type=bool, default=True)
 parser.add_argument('--option_size', help='Number of options', type=int, default=2)
 parser.add_argument('--nepisodes', help="Number of episodes per run", type=int, default=1000)
-parser.add_argument('--nsteps', help="Maximum number of steps per episode", type=int, default=500)
+parser.add_argument('--nsteps', help="Maximum number of steps per episode", type=int, default=300)
 parser.add_argument('--discount', help='Discount factor', type=float, default=0.999)
 parser.add_argument('--epsilon', help="Factor on randomness start point", type=float, default=1.0)
 parser.add_argument('--epsilon_decay', help="Decay on randomness", type=float, default=0.995)

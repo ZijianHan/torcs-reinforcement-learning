@@ -139,17 +139,23 @@ class TorcsEnv:
         rpm = np.array(obs['rpm'])
         racePos = obs['racePos']
 
-        progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos']+0.5)
-        reward = progress/10
+        if racePos==1:
+            reward_pos = 10
+        elif racePos == 2:
+            reward_pos = 2
+        else:
+            reward_pos = 0
 
-        # if drive on left, give a negative reward
-        if trackPos > 0:
-            reward = -5.0
+
+
+        speed_dif = np.abs(sp-self.default_speed)/(self.default_speed)
+
+        reward = reward_pos - speed_dif
 
         episode_terminate = False
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
-            reward = -10.0
+            reward = -20.0
             #episode_terminate = True
             #client.R.d['meta'] = True
 
