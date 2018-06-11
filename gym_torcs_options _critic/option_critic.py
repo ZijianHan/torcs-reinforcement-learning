@@ -163,28 +163,35 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain):
     if ((ob.wheelSpinVel[2]+ob.wheelSpinVel[3]) -
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
-    safety_distance_long = 15/200
+    safety_distance_long = (15 + 20* ob_speedX/MAX_SPEED)/200
     safety_distance_lat = 15/200
     #print(ob.opponents)
 
     if (safety_constrain):
+        frontDis_list = []
+        sideDis_list = []
+
 
         for i in range(1):
             if (ob.distFromStart < 1000-15 or (ob.distFromStart >1313 and ob.distFromStart<2313-15)):
                 base_point = 17
             else:
                 base_point = 19
-            if ob.opponents[i+base_point] < safety_distance_long:
-                action_accel = 0
-                action_brake = 1.0*(25-ob.opponents[i+base_point] * 200)/15
-                print("Frontal collision warning")
+
+            frontDis_list.append(ob.opponents[i+base_point])
+
+        if min(frontDis_list) < safety_distance_long:
+            action_accel = 0
+            action_brake = 0.6 #1.0*(25-min(frontDis_list) * 200)/15
+            print("Frontal collision warning")
 
 
         for j in range(8):
-            if ob.opponents[j+22] < safety_distance_lat:
-                #action_steer += 0.2
-                action_steer += 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5 *
-                print("Side collision warning")
+            sideDis_list.append(ob.opponents[j+22])
+        if min(sideDis_list) < safety_distance_lat:
+            #action_steer += 0.2
+            action_steer += 0.3*(15-(min(sideDis_list) * 200))/15 # used to be 0.5 *
+            print("Side collision warning")
             '''
             if ob.opponents[j+8] < safety_distance_lat:
                 #action_steer += 0.2
@@ -221,9 +228,9 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
     except:
         print("Cannot find the weight")
 
-    option_policies = [overtaking_policy,overtaking_policy, following_policy,following_policy]
+    option_policies = [overtaking_policy, following_policy,following_policy]
 
-    termination_steps = [30,15,30,15]
+    termination_steps = [30,30,15]
 
     # Define option-value function Q_Omega(s,omega): estimate values upon arrival
     critic = OptionValueCritic(args.state_size, args.option_size, args.discount, args.learning_rate_critic,args.epsilon,args.epsilon_min,args.epsilon_decay)
@@ -267,12 +274,14 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
 
         # generate a first primitive action according to current option
         state_init = state
+        ob_pre = ob
         for step in range(args.nsteps):
             action = option_policies[option].model.predict(state.reshape(1, state.shape[0]))
-            action = Low_level_controller(action[0][0],action[0][1],ob, safety_constrain_flag)
+            action = Low_level_controller(action[0][0],action[0][1],ob_pre, safety_constrain_flag)
 
             print("Step:{} Option: {} Action:{}".format(step,option,action))
             ob, r_t_primitive, done, _ = env.step(action)
+            ob_pre = ob
             reward_option = reward_option + args.discount**(duration-1)*r_t_primitive
 
             state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
