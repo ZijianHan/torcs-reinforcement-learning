@@ -21,6 +21,7 @@ import snakeoil3_gym as snakeoil3
 
 from gym_torcs import TorcsEnv
 
+import csv
 
 class OptionValueCritic:
     def __init__(self, state_size, option_size, discount, learning_rate_critic,epsilon,epsilon_min,epsilon_decay):
@@ -76,6 +77,7 @@ class OptionValueCritic:
             self.model.fit(state, update_target, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+        print("epsilon is: ",self.epsilon)
 
     def value(self, state, option=None):
         value = self.model.predict(state)[0]
@@ -166,17 +168,29 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain):
     #print(ob.opponents)
 
     if (safety_constrain):
-        for i in range(2):
-            if ob.opponents[i+16] < safety_distance_long:
+
+        for i in range(1):
+            if (ob.distFromStart < 1000-15 or (ob.distFromStart >1313 and ob.distFromStart<2313-15)):
+                base_point = 17
+            else:
+                base_point = 19
+            if ob.opponents[i+base_point] < safety_distance_long:
                 action_accel = 0
-                action_brake = 0.2
+                action_brake = 1.0*(25-ob.opponents[i+base_point] * 200)/15
                 print("Frontal collision warning")
+
 
         for j in range(8):
             if ob.opponents[j+22] < safety_distance_lat:
                 #action_steer += 0.2
-                action_steer += 0.5*(15-(ob.opponents[j+22] * 200))/15
+                action_steer += 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5 *
                 print("Side collision warning")
+            '''
+            if ob.opponents[j+8] < safety_distance_lat:
+                #action_steer += 0.2
+                action_steer -= 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5
+            '''
+
 
     a_t = [action_steer, action_accel, action_brake]
 
@@ -207,7 +221,9 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
     except:
         print("Cannot find the weight")
 
-    option_policies = [overtaking_policy, following_policy]
+    option_policies = [overtaking_policy,overtaking_policy, following_policy,following_policy]
+
+    termination_steps = [30,15,30,15]
 
     # Define option-value function Q_Omega(s,omega): estimate values upon arrival
     critic = OptionValueCritic(args.state_size, args.option_size, args.discount, args.learning_rate_critic,args.epsilon,args.epsilon_min,args.epsilon_decay)
@@ -227,6 +243,8 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
     env = TorcsEnv(vision=args.vision, throttle=True,gear_change=False)
 
     print("TORCS Experiment Start.")
+
+    cumreward_list = []
 
     for episode in range(args.nepisodes):
         # Define variables to store values
@@ -262,7 +280,8 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
 
 
             # Termination might occur upon entering the new state
-            if (critic.terminate(state.reshape(1, state.shape[0]),option)==1 or duration >= args.max_option_duration):
+            #critic.terminate(state.reshape(1, state.shape[0]),option)==1 or
+            if (duration >= termination_steps[option]): # args.max_option_duration
                 buff.add(state_init,option,reward_option,state_,done)
                 if train_indicator:
                     batch = buff.getBatch(args.batch_size)
@@ -277,15 +296,26 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
 
             state = state_
 
+
             cumreward += r_t_primitive
             duration += 1
             if done:
                 break
-        if episode % 10 == 0:
-            critic.save("option_value_model.h5")
+        if train_indicator:
+            if episode % 10 == 0:
+                critic.save("option_value_model.h5")
 
         history[episode, 0] = step
         history[episode, 1] = avgduration
+        cumreward_list.append(cumreward)
+
+        with open('cumreward.csv', 'w', newline='') as csvfile:
+            #rewardwriter = csv.writer(csvfile, delimiter=' ',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            rewardwriter = csv.writer(csvfile)
+            rewardwriter.writerow(cumreward_list)
+
+
+
 
         plt.figure(1)
         plt.hold(True)
@@ -295,9 +325,9 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
         plt.ylabel('Total reward per epsiode')
         plt.subplot(212)
         plt.hold(True)
-        plt.plot(episode,avgduration,'bo')
+        plt.plot(episode,critic.epsilon,'bo')
         plt.xlabel('episode')
-        plt.ylabel('avgduration')
+        plt.ylabel('epsilon')
         plt.draw()
         plt.show()
         plt.pause(0.001)

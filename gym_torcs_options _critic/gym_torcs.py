@@ -139,12 +139,7 @@ class TorcsEnv:
         rpm = np.array(obs['rpm'])
         racePos = obs['racePos']
 
-        if racePos==1:
-            reward_pos = 10
-        elif racePos == 2:
-            reward_pos = 2
-        else:
-            reward_pos = 0
+        reward_pos = 5 - racePos
 
 
 
@@ -152,12 +147,19 @@ class TorcsEnv:
 
         reward = reward_pos - speed_dif
 
+        '''
+        if trackPos<0:
+            reward = reward + 0.1
+        else:
+            reward = reward + 0
+        '''
+
         episode_terminate = False
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
-            reward = -20.0
-            #episode_terminate = True
-            #client.R.d['meta'] = True
+            reward = -10.0
+            episode_terminate = True
+            client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track
@@ -266,7 +268,8 @@ class TorcsEnv:
                      'track',
                      'trackPos',
                      'wheelSpinVel',
-                     'racePos']
+                     'racePos',
+                     'distFromStart']
             Observation = col.namedtuple('Observaion', names)
             return Observation(focus=np.array(raw_obs['focus'], dtype=np.float32)/200.,
                                speedX=np.array(raw_obs['speedX'], dtype=np.float32)/300.0,
@@ -279,7 +282,8 @@ class TorcsEnv:
                                track=np.array(raw_obs['track'], dtype=np.float32)/200.,
                                trackPos=np.array(raw_obs['trackPos'], dtype=np.float32)/1.,
                                wheelSpinVel=np.array(raw_obs['wheelSpinVel'], dtype=np.float32),
-                               racePos=np.array(raw_obs['racePos'], dtype=np.float32))
+                               racePos=np.array(raw_obs['racePos'], dtype=np.float32),
+                               distFromStart=np.array(raw_obs['distFromStart'],dtype=np.float32))
         else:
             names = ['focus',
                      'speedX', 'speedY', 'speedZ', 'angle',

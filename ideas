@@ -1,0 +1,9 @@
+1. mention that the learning process is not easy to kernel_initialize
+2. safety module constrain, can be reflected in the reward function to improve the learning behavior, based on the observation
+3. what will happen when give up overtaking with cars on right
+
+
+save out the values:
+
+
+termination: copy of options and with different steps, or maybe hard coded with gap features

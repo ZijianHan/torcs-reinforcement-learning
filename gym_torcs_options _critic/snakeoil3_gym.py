@@ -337,7 +337,7 @@ class ServerState():
         #'fuel',
         #'gear',
         #'distRaced',
-        #'distFromStart',
+        'distFromStart',
         'racePos',
         'opponents',
         'wheelSpinVel',
