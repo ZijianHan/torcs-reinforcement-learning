@@ -34,6 +34,8 @@ class TorcsEnv:
         time.sleep(0.5)
         os.system('sh autostart.sh')
         time.sleep(0.5)
+        os.system('sh speedup.sh')
+        time.sleep(0.5)
 
         """
         # Modify here if you use multiple tracks in the environment
@@ -232,6 +234,8 @@ class TorcsEnv:
             os.system('torcs -nofuel -nolaptime &')
         time.sleep(0.5)
         os.system('sh autostart.sh')
+        time.sleep(0.5)
+        os.system('sh speedup.sh')
         time.sleep(0.5)
 
     def agent_to_torcs(self, u):

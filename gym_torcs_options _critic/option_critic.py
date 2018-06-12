@@ -68,11 +68,7 @@ class OptionValueCritic:
                 update_target[0][option] = reward
             else:
                 next_values = self.model.predict(next_state)
-                if next_values[0][option] == np.max(next_values):
-                    next_termination = 0
-                else:
-                    next_termination = 1
-                update_target[0][option] = reward + self.discount*((1. - next_termination)*next_values[0][option] + next_termination*np.max(next_values[0]))
+                update_target[0][option] = reward + self.discount*(np.max(next_values[0]))
 
             self.model.fit(state, update_target, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
@@ -119,11 +115,13 @@ class OptionValueCritic:
         self.model.save_weights(name)
 
 
-def Low_level_controller(delta, speed_target, ob, safety_constrain):
+def Low_level_controller(delta, speed_target, ob, safety_constrain,option):
     ob_angle = ob.angle
     ob_speedX = ob.speedX * 300
     lateralSetPoint = delta
-    # Steer control==
+    #if option == 1:
+    #    lateralSetPoint += 0.3
+    # Steer control
     if lateralSetPoint < -1:
         lateralSetPoint = -1
     elif lateralSetPoint > 1:
@@ -163,46 +161,46 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain):
     if ((ob.wheelSpinVel[2]+ob.wheelSpinVel[3]) -
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
-    safety_distance_long = (15 + 20* ob_speedX/MAX_SPEED)/200
+    #safety_distance_long = (15 + 10* ob_speedX/MAX_SPEED)/200
+    safety_distance_long = 15/200
     safety_distance_lat = 15/200
     #print(ob.opponents)
+    #if option == 1:
+    #    safety_constrain = 0
 
     if (safety_constrain):
         frontDis_list = []
         sideDis_list = []
+        if (ob.distFromStart < 1000-15 or (ob.distFromStart >1313 and ob.distFromStart<2313-15)):
+            base_point = 17
+        else:
+            base_point = 19
 
 
-        for i in range(1):
-            if (ob.distFromStart < 1000-15 or (ob.distFromStart >1313 and ob.distFromStart<2313-15)):
-                base_point = 17
-            else:
-                base_point = 19
-
-            frontDis_list.append(ob.opponents[i+base_point])
-
-        if min(frontDis_list) < safety_distance_long:
-            action_accel = 0
-            action_brake = 0.6 #1.0*(25-min(frontDis_list) * 200)/15
-            print("Frontal collision warning")
+        for i in range(3):
+            if ob.opponents[i+base_point] < safety_distance_long:
+                action_accel = 0
+                action_brake = 0.4 #1.0*(25-min(frontDis_list) * 200)/15
+                print("Frontal collision warning")
+                break
 
 
         for j in range(8):
-            sideDis_list.append(ob.opponents[j+22])
-        if min(sideDis_list) < safety_distance_lat:
-            #action_steer += 0.2
-            action_steer += 0.3*(15-(min(sideDis_list) * 200))/15 # used to be 0.5 *
-            print("Side collision warning")
-            '''
-            if ob.opponents[j+8] < safety_distance_lat:
+            if ob.opponents[j+22] < safety_distance_lat:
                 #action_steer += 0.2
-                action_steer -= 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5
+                action_steer += 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5 *
+                print("Side collision warning")
+                break
+                '''
+                if ob.opponents[j+8] < safety_distance_lat:
+                    #action_steer += 0.2
+                    action_steer -= 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5
             '''
 
 
     a_t = [action_steer, action_accel, action_brake]
 
     return a_t
-
 def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train, 0 means simply Run
     plt.ion()
     args = parser.parse_args()
@@ -228,9 +226,9 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
     except:
         print("Cannot find the weight")
 
-    option_policies = [overtaking_policy, following_policy,following_policy]
+    option_policies = [overtaking_policy,following_policy]
 
-    termination_steps = [30,30,15]
+    termination_steps = [30,30]
 
     # Define option-value function Q_Omega(s,omega): estimate values upon arrival
     critic = OptionValueCritic(args.state_size, args.option_size, args.discount, args.learning_rate_critic,args.epsilon,args.epsilon_min,args.epsilon_decay)
@@ -260,7 +258,7 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
         option_switches = 0
         avgduration = 0.
         reward_option = 0
-        damage_steps = 0
+        total_options = 0
 
         if np.mod(episode, 3) == 0:
             ob = env.reset(relaunch=True)   #relaunch TORCS every 3 episode because of the memory leak error
@@ -269,48 +267,33 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
 
 
         state = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
-        # Choose an option based on initial states
-        option = critic.get_option(state.reshape(1, state.shape[0]),train_indicator)
-
-        # generate a first primitive action according to current option
-        state_init = state
-        ob_pre = ob
+        state = state.reshape(1, state.shape[0])
         for step in range(args.nsteps):
-            action = option_policies[option].model.predict(state.reshape(1, state.shape[0]))
-            action = Low_level_controller(action[0][0],action[0][1],ob_pre, safety_constrain_flag)
+            total_options += 1
+            option = 1#critic.get_option(state,train_indicator)
+            reward_option = 0
+            for i in range(termination_steps[option]):
+                action = option_policies[option].model.predict(state)
+                action = Low_level_controller(action[0][0],action[0][1],ob, safety_constrain_flag,option)
 
-            print("Step:{} Option: {} Action:{}".format(step,option,action))
-            ob, r_t_primitive, done, _ = env.step(action)
-            ob_pre = ob
-            reward_option = reward_option + args.discount**(duration-1)*r_t_primitive
-
-            state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
-
-
-
-            # Termination might occur upon entering the new state
-            #critic.terminate(state.reshape(1, state.shape[0]),option)==1 or
-            if (duration >= termination_steps[option]): # args.max_option_duration
-                buff.add(state_init,option,reward_option,state_,done)
-                if train_indicator:
-                    batch = buff.getBatch(args.batch_size)
-                    critic.replay(batch)
-                # if terminates, get a new option based on current state
-                option = critic.get_option(state_.reshape(1, state_.shape[0]),train_indicator)
-                option_switches += 1
-                avgduration += (1./option_switches)*(duration - avgduration)
-                duration = 1
-                reward_option = 0
-                state_init = state_
-
-            state = state_
+                print("Option: {} Action:{}".format(option,action))
+                ob, r_t_primitive, done, _ = env.step(action)
+                reward_option = reward_option + args.discount**(i)*r_t_primitive
+                state_ = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm, ob.opponents))
+                state_ = state_.reshape(1, state_.shape[0])
+                state = state_
+                if done:
+                    break
 
 
-            cumreward += r_t_primitive
-            duration += 1
+            buff.add(state,option,reward_option,state_,done)
+
+            cumreward += reward_option
             if done:
                 break
         if train_indicator:
+            batch = buff.getBatch(args.batch_size)
+            critic.replay(batch)
             if episode % 10 == 0:
                 critic.save("option_value_model.h5")
 
@@ -328,15 +311,21 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
 
         plt.figure(1)
         plt.hold(True)
-        plt.subplot(211)
+        plt.subplot(311)
         plt.plot(episode,cumreward,'ro')
         plt.xlabel('episode')
         plt.ylabel('Total reward per epsiode')
-        plt.subplot(212)
+        plt.subplot(312)
         plt.hold(True)
-        plt.plot(episode,critic.epsilon,'bo')
+        plt.plot(episode,cumreward/total_options,'bo')
+        plt.xlabel('episode')
+        plt.ylabel('Average reward per option')
+        plt.subplot(313)
+        plt.hold(True)
+        plt.plot(episode,critic.epsilon,'go')
         plt.xlabel('episode')
         plt.ylabel('epsilon')
+
         plt.draw()
         plt.show()
         plt.pause(0.001)
@@ -344,6 +333,7 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
 
 
     env.end()  # This is for shutting down TORCS
+    plt.savefig('test.png')
 
     print("Finish.")
 
