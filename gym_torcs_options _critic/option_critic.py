@@ -174,10 +174,10 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain,option):
         if (ob.distFromStart < 1000-15 or (ob.distFromStart >1313 and ob.distFromStart<2313-15)):
             base_point = 17
         else:
-            base_point = 19
+            base_point = 18
 
 
-        for i in range(3):
+        for i in range(2):
             if ob.opponents[i+base_point] < safety_distance_long:
                 action_accel = 0
                 action_brake = 0.4 #1.0*(25-min(frontDis_list) * 200)/15
@@ -270,7 +270,7 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
         state = state.reshape(1, state.shape[0])
         for step in range(args.nsteps):
             total_options += 1
-            option = 1#critic.get_option(state,train_indicator)
+            option = 0#critic.get_option(state,train_indicator)
             reward_option = 0
             for i in range(termination_steps[option]):
                 action = option_policies[option].model.predict(state)
