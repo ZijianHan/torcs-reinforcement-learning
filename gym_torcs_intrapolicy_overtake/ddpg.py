@@ -71,18 +71,31 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     #print(ob.opponents)
 
     if (safety_constrain):
-        for i in range(6):
-            if ob.opponents[i+14] < safety_distance_long:
+        if (ob.distFromStart < 1000-15 or (ob.distFromStart >1313 and ob.distFromStart<2313-15)):
+            base_point = 17
+        else:
+            base_point = 18
+
+
+        for i in range(2):
+            if ob.opponents[i+base_point] < safety_distance_long:
                 action_accel = 0
-                action_brake = 0.2
+                action_brake = 0.4 #1.0*(25-min(frontDis_list) * 200)/15
                 print("Frontal collision warning")
+                break
+
 
         for j in range(8):
-            print(ob.opponents[j+22])
             if ob.opponents[j+22] < safety_distance_lat:
                 #action_steer += 0.2
-                action_steer += 0.5*(15-(ob.opponents[j+22] * 200))/15
+                action_steer += 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5 *
                 print("Side collision warning")
+                break
+                '''
+                if ob.opponents[j+8] < safety_distance_lat:
+                    #action_steer += 0.2
+                    action_steer -= 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5
+            '''
 
 
 
@@ -113,13 +126,13 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
 
     vision = False
 
-    EXPLORE = 20000.
-    episode_count = 2000
-    max_steps = 500
+    EXPLORE = 100000.
+    episode_count = 1000
+    max_steps = 200
     reward = 0
     done = False
     step = 0
-    epsilon = 1
+    epsilon = 0.4 #1
     indicator = 0
 
     plt.ion()
@@ -153,9 +166,9 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
 
     try:
         actor.model.load_weights("actormodel_overtaking.h5")
-        critic.model.load_weights("criticmodel.h5")
+        critic.model.load_weights("criticmodel_overtaking.h5")
         actor.target_model.load_weights("actormodel_overtaking.h5")
-        critic.target_model.load_weights("criticmodel.h5")
+        critic.target_model.load_weights("criticmodel_overtaking.h5")
         print("Weight load successfully")
     except:
         print("Cannot find the weight")
@@ -178,14 +191,14 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
         damage_steps = 0
         for j in range(max_steps):
             loss = 0
-            epsilon = 1- step*1.0 / EXPLORE
+            epsilon -= 1.0 / EXPLORE
             a_t = np.zeros([1,action_dim])
             noise_t = np.zeros([1,action_dim])
 
             a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
-            noise_t[0][0] = train_indicator * max(epsilon, 0.2) * OU.function(a_t_original[0][0],  0.0 , 0.80, 0.80)
+            noise_t[0][0] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][0],  0.0 , 0.80, 0.80)
             #noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  1.0 , 1.00, 0.10)
-            noise_t[0][1] = train_indicator * max(epsilon, 0.2) * OU.function(a_t_original[0][1],  0.9 , 1.0, 0.10)
+            noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  0.9 , 1.0, 0.10)
 
             #The following code do the stochastic brake
             #if random.random() <= 0.1:
@@ -204,7 +217,7 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
 
             ob, r_t, done, info = env.step(a_t_primitive)
 
-            if r_t == -20:
+            if r_t == -1:
                 damage_steps += 1
 
             s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents))
@@ -260,18 +273,22 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
 
         plt.figure(1)
         plt.hold(True)
-        plt.subplot(311)
+        plt.subplot(411)
         plt.plot(i,total_reward,'ro')
         plt.xlabel("Episodie")
         plt.ylabel("Episodic total reward")
-        plt.subplot(312)
+        plt.subplot(412)
         plt.plot(i,total_reward/j,'bo')
         plt.xlabel("Episodie")
         plt.ylabel("Expected reward each step")
-        plt.subplot(313)
+        plt.subplot(413)
         plt.plot(i,damage_rate,'go')
         plt.xlabel("Episodie")
         plt.ylabel("Damage rate per episode [%]")
+        plt.subplot(414)
+        plt.plot(i,max(epsilon,0),'yo')
+        plt.xlabel("Episodie")
+        plt.ylabel("epsilon")
         plt.draw()
         plt.show()
         plt.pause(0.001)

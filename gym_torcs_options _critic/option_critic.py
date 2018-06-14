@@ -201,7 +201,7 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain,option):
     a_t = [action_steer, action_accel, action_brake]
 
     return a_t
-def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train, 0 means simply Run
+def playGame(train_indicator=0, safety_constrain_flag = True):    #1 means Train, 0 means simply Run
     plt.ion()
     args = parser.parse_args()
 
@@ -270,7 +270,7 @@ def playGame(train_indicator=1, safety_constrain_flag = True):    #1 means Train
         state = state.reshape(1, state.shape[0])
         for step in range(args.nsteps):
             total_options += 1
-            option = 0#critic.get_option(state,train_indicator)
+            option = critic.get_option(state,train_indicator)
             reward_option = 0
             for i in range(termination_steps[option]):
                 action = option_policies[option].model.predict(state)

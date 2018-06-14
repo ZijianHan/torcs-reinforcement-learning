@@ -136,20 +136,32 @@ class TorcsEnv:
         # direction-dependent positive reward
         track = np.array(obs['track'])
         trackPos = np.array(obs['trackPos'])
-        sp = np.array(obs['speedX'])
+        sp = np.array(obs['speedX'])/300
         damage = np.array(obs['damage'])
         rpm = np.array(obs['rpm'])
         racePos = obs['racePos']
         racePos_pre = obs_pre['racePos']
+        opponents = obs['opponents'] # raw distance/200, [0,200]
+
+        base_point = 17
+        safety_distance_long = 15
+        safety_distance_lat = 3
+        reward_safety = 0
+        for i in range(2):
+            if opponents[i+base_point] < safety_distance_long:
+                reward_safety = -0.1
+                break
+
+
+        for j in range(8):
+            if opponents[j+22] < safety_distance_lat:
+                reward_safety = -0.1
+                break
 
 
 
-        if racePos==1:
-            reward_pos = 10
-        elif racePos == 2:
-            reward_pos = 2
-        else:
-            reward_pos = 0
+        reward_pos = (5 - racePos)/5
+
         '''
         trackPos_dif = np.abs(trackPos+0.5)
 
@@ -158,8 +170,14 @@ class TorcsEnv:
         reward = reward_pos - trackPos_dif - speed_dif
         '''
 
-        progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos']+0.5)
-        reward = reward_pos + progress/10
+        reward_speed = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle']))
+
+        reward_track =  - sp * np.abs(obs['trackPos']-0.5)
+
+
+        print("reward speed",reward_speed,"reward track",reward_track)
+
+        reward = reward_pos + reward_speed + reward_track + reward_safety
 
 
 
@@ -167,13 +185,13 @@ class TorcsEnv:
         episode_terminate = False
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
-            reward = -20.0
+            reward = -1.0
             #episode_terminate = True
             #client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track
-            reward = -20.0
+            reward = -1.1
             episode_terminate = True
             client.R.d['meta'] = True
         '''
@@ -284,7 +302,8 @@ class TorcsEnv:
                      'track',
                      'trackPos',
                      'wheelSpinVel',
-                     'racePos']
+                     'racePos',
+                     'distFromStart']
             Observation = col.namedtuple('Observaion', names)
             return Observation(focus=np.array(raw_obs['focus'], dtype=np.float32)/200.,
                                speedX=np.array(raw_obs['speedX'], dtype=np.float32)/300.0,
@@ -297,7 +316,8 @@ class TorcsEnv:
                                track=np.array(raw_obs['track'], dtype=np.float32)/200.,
                                trackPos=np.array(raw_obs['trackPos'], dtype=np.float32)/1.,
                                wheelSpinVel=np.array(raw_obs['wheelSpinVel'], dtype=np.float32),
-                               racePos=np.array(raw_obs['racePos'], dtype=np.float32))
+                               racePos=np.array(raw_obs['racePos'], dtype=np.float32),
+                               distFromStart=np.array(raw_obs['distFromStart'], dtype=np.float32))
         else:
             names = ['focus',
                      'speedX', 'speedY', 'speedZ', 'angle',
