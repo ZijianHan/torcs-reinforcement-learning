@@ -185,7 +185,7 @@ def Low_level_controller(delta, speed_target, ob, safety_constrain,option):
                 break
 
 
-        for j in range(8):
+        for j in range(11):
             if ob.opponents[j+22] < safety_distance_lat:
                 #action_steer += 0.2
                 action_steer += 0.3*(15-(ob.opponents[j+22] * 200))/15 # used to be 0.5 *

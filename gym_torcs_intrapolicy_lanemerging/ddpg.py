@@ -38,7 +38,7 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     pLateralOffset = 0.5
     pAngleOffset = 3
 
-    action_steer = -pLateralOffset *(ob.trackPos + lateralSetPoint) + pAngleOffset * ob_angle
+    action_steer = -pLateralOffset *(ob.trackPos - lateralSetPoint) + pAngleOffset * ob_angle
 
 
     action_steer = np.tanh(action_steer)
@@ -109,7 +109,7 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     #print('accel:',action_accel)
     #print('brake:',action_brake)
     return a_t
-def playGame(train_indicator=1, safety_constrain_flag = False):    #1 means Train, 0 means simply Run
+def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Train, 0 means simply Run
     initialization = 0
     episode_trained = 0
     BUFFER_SIZE = 100000
@@ -127,7 +127,7 @@ def playGame(train_indicator=1, safety_constrain_flag = False):    #1 means Trai
     vision = False
 
     EXPLORE = 100000.
-    episode_count = 3000
+    episode_count = 500
     max_steps = 500
     reward = 0
     done = False
@@ -165,10 +165,10 @@ def playGame(train_indicator=1, safety_constrain_flag = False):    #1 means Trai
             json.dump(critic.model.to_json(), outfile)
 
     try:
-        actor.model.load_weights("actormodel_overtaking.h5")
-        critic.model.load_weights("criticmodel_overtaking.h5")
-        actor.target_model.load_weights("actormodel_overtaking.h5")
-        critic.target_model.load_weights("criticmodel_overtaking.h5")
+        actor.model.load_weights("actormodel_mergingleft.h5")
+        critic.model.load_weights("criticmodel_mergingleft.h5")
+        actor.target_model.load_weights("actormodel_mergingleft.h5")
+        critic.target_model.load_weights("criticmodel_mergingleft.h5")
         print("Weight load successfully")
     except:
         print("Cannot find the weight")
@@ -191,7 +191,7 @@ def playGame(train_indicator=1, safety_constrain_flag = False):    #1 means Trai
         damage_steps = 0
         for j in range(max_steps):
             loss = 0
-            epsilon -= 1 / EXPLORE
+            epsilon -= 0.5 / EXPLORE
             a_t = np.zeros([1,action_dim])
             noise_t = np.zeros([1,action_dim])
             if train_indicator:
@@ -220,7 +220,7 @@ def playGame(train_indicator=1, safety_constrain_flag = False):    #1 means Trai
 
             ob, r_t, done, info = env.step(a_t_primitive)
 
-            if r_t == -5.0:
+            if r_t == -1:
                 damage_steps += 1
 
             s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm,ob.opponents))
@@ -266,11 +266,11 @@ def playGame(train_indicator=1, safety_constrain_flag = False):    #1 means Trai
         if np.mod(i, 3) == 0:
             if (train_indicator):
                 print("Now we save model")
-                actor.model.save_weights("actormodel_overtaking.h5", overwrite=True)
+                actor.model.save_weights("actormodel_mergingleft.h5", overwrite=True)
                 with open("actormodel.json", "w") as outfile:
                     json.dump(actor.model.to_json(), outfile)
 
-                critic.model.save_weights("criticmodel_overtaking.h5", overwrite=True)
+                critic.model.save_weights("criticmodel_mergingleft.h5", overwrite=True)
                 with open("criticmodel.json", "w") as outfile:
                     json.dump(critic.model.to_json(), outfile)
 

@@ -163,24 +163,24 @@ class TorcsEnv:
         reward = reward_pos - trackPos_dif - speed_dif
         '''
 
-        reward_speed = (spX*np.cos(obs['angle']) - np.abs(spX*np.sin(obs['angle'])))
-        reward_track =  - spX * np.abs(obs['trackPos']+0.5)
+        reward_speed = (spX*np.cos(obs['angle']) - np.abs(spX*np.sin(obs['angle'])))/120
+        reward_track =  - spX * np.abs(obs['trackPos']-0.5)/120
 
 
         print("reward speed:",reward_speed,"reward track:",reward_track)
 
-        reward = (reward_speed/80 + reward_track/120) + reward_safety
+        reward = reward_speed + 2*reward_track
 
         for i in range(2):
             TTC_long = opponents[i+base_point]
             if TTC_long < TTC_long_threshold:
-                reward = -1.0
+                reward = -0.5
                 break
 
 
         for j in range(11):
             if opponents[j+22] < TTC_lat_threshold:
-                reward = -1.0
+                reward = -0.5
                 break
 
 
@@ -189,13 +189,13 @@ class TorcsEnv:
         episode_terminate = False
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
-            reward = -5.0
+            reward = -1.0
             #episode_terminate = True
             #client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track
-            reward = -5.0
+            reward = -1.0
             episode_terminate = True
             client.R.d['meta'] = True
         '''
