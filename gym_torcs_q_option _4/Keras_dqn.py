@@ -18,7 +18,7 @@ from gym_torcs import TorcsEnv
 vision = False
 OUTPUT_GRAPH = True
 MAX_EPISODE = 1000
-MAX_EP_STEPS = 15   # maximum time step in one episode
+MAX_EP_STEPS = 150   # maximum time step in one episode
 GAMMA = 0.999     # reward discount in TD error
 EPSILON = 1.0#0.073
 EPSILON_MIN = 0.05 #0.05
@@ -38,13 +38,15 @@ def Low_level_controller(ob, safety_constrain,option):
         delta = 0.5
         for i in range(2):
             if ob.opponents[i+17] < 15/200:
-                speed_target -= 0.25
+                speed_target -= (0.15 + (1/200)/ob.opponents[i+17])
+                print("braking")
                 break
     else:
         delta = -0.5
         for i in range(2):
             if ob.opponents[i+17] < 15/200:
-                speed_target -= 0.25
+                speed_target -= (0.15 + (1/200)/ob.opponents[i+17])
+                print("braking")
                 break
 
 
@@ -92,8 +94,8 @@ def Low_level_controller(ob, safety_constrain,option):
        (ob.wheelSpinVel[0]+ob.wheelSpinVel[1]) > 5):
        action_accel-= .2
     #safety_distance_long = (15 + 10* ob_speedX/MAX_SPEED)/200
-    safety_distance_long = 15/200
-    safety_distance_lat = 15/200
+    safety_distance_long = 8/200
+    safety_distance_lat = 10/200
     #print(ob.opponents)
     #if option == 1:
     #    safety_constrain = 0
@@ -153,6 +155,7 @@ class DQNAgent:
         # Neural Net for Deep-Q learning Model
         model = Sequential()
         model.add(Dense(200, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(200, activation='relu'))
         model.add(Dense(200, activation='relu'))
         model.add(Dense(self.action_size))
         model.compile(loss=self._huber_loss,
