@@ -17,15 +17,15 @@ from gym_torcs import TorcsEnv
 # Superparameters
 vision = False
 OUTPUT_GRAPH = True
-MAX_EPISODE = 1000
-MAX_EP_STEPS = 150   # maximum time step in one episode
+MAX_EPISODE = 2000
+MAX_EP_STEPS = 20   # maximum time step in one episode
 GAMMA = 0.999     # reward discount in TD error
 EPSILON = 1.0#0.073
 EPSILON_MIN = 0.05 #0.05
-EPSILON_DECAY = 0.995
+EPSILON_DECAY = 0.997
 LR =0.001     # learning rate for critic
 PI= 3.14159265359
-step_time = 15
+step_time = [10,20,30,10,20,30]
 
 
 def Low_level_controller(ob, safety_constrain,option):
@@ -34,18 +34,18 @@ def Low_level_controller(ob, safety_constrain,option):
 
     # set targets for different options
     speed_target = 1
-    if option == 0:
+    if option == 0 or option==1 or option == 2:
         delta = 0.5
         for i in range(2):
             if ob.opponents[i+17] < 15/200:
-                speed_target -= (0.15 + (1/200)/ob.opponents[i+17])
+                speed_target -= ((1.2/(200*ob.speedX))/ob.opponents[i+17])
                 print("braking")
                 break
     else:
         delta = -0.5
         for i in range(2):
             if ob.opponents[i+17] < 15/200:
-                speed_target -= (0.15 + (1/200)/ob.opponents[i+17])
+                speed_target -= ((1.2/(200*ob.speedX))/ob.opponents[i+17])
                 print("braking")
                 break
 
@@ -156,7 +156,6 @@ class DQNAgent:
         model = Sequential()
         model.add(Dense(200, input_dim=self.state_size, activation='relu'))
         model.add(Dense(200, activation='relu'))
-        model.add(Dense(200, activation='relu'))
         model.add(Dense(self.action_size))
         model.compile(loss=self._huber_loss,
                       optimizer=Adam(lr=self.learning_rate))#loss = 'mse',
@@ -203,10 +202,10 @@ def playGame(train_indicator=0):
     plt.show()
     env = TorcsEnv(vision=vision, throttle=True,gear_change=False)
     state_size = 29+36
-    action_size = 2
+    action_size = 6
     agent = DQNAgent(state_size, action_size)
     try:
-        agent.load("save/torcs-dqn.h5")
+        agent.load("save/six_options/torcs-dqn.h5")
     except:
         print("Cannot find the weight")
     done = False
@@ -233,9 +232,9 @@ def playGame(train_indicator=0):
             option = agent.act(state,train_indicator)
             print("option is: ",option)
             reward = 0
-            for i in range(step_time):
+            for i in range(step_time[option]):
                 action = Low_level_controller(ob, False,option)
-                #print(action)
+                print(action)
                 ob, r_t_primitive, done, info = env.step(action)
                 reward = reward + GAMMA**(i)*r_t_primitive
                 if done:
@@ -253,7 +252,7 @@ def playGame(train_indicator=0):
             agent.replay(batch_size)
         if i_episode % 10 == 0:
             if train_indicator:
-                agent.save("save/torcs-dqn.h5")
+                agent.save("save/six_options/torcs-dqn.h5")
         plt.figure(1)
         plt.hold(True)
         plt.subplot(211)

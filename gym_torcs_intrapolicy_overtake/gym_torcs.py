@@ -169,7 +169,7 @@ class TorcsEnv:
 
         print("reward speed:",reward_speed,"reward track:",reward_track)
 
-        reward = (reward_speed/80 + reward_track/120) + reward_safety
+        reward = (reward_speed + reward_track/2) + reward_safety
 
         for i in range(2):
             TTC_long = opponents[i+base_point]

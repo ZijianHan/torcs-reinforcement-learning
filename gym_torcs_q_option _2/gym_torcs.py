@@ -154,8 +154,7 @@ class TorcsEnv:
 
 
 
-        reward = reward_speed + reward_track/2
-
+        reward = reward_speed/120 + reward_track/240
 
         for i in range(2):
             TTC_long = opponents[i+base_point]
