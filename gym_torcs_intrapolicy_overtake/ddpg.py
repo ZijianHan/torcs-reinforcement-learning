@@ -110,7 +110,7 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     #print('brake:',action_brake)
     return a_t
 def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Train, 0 means simply Run
-    initialization = 0
+    #initialization = 0
     episode_trained = 0
     BUFFER_SIZE = 100000
     BATCH_SIZE = 32
@@ -154,6 +154,7 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
 
     #Now load the weight
     print("Now we load the weight")
+    '''
     if (initialization):
         print("Now we save model")
         actor.model.save_weights("actormodel.h5", overwrite=True)
@@ -163,6 +164,7 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
         critic.model.save_weights("criticmodel.h5", overwrite=True)
         with open("criticmodel.json", "w") as outfile:
             json.dump(critic.model.to_json(), outfile)
+    '''
 
     try:
         actor.model.load_weights("actormodel_overtaking.h5")
@@ -198,9 +200,9 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
                 a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
             else:
                 a_t_original = actor.target_model.predict(s_t.reshape(1, s_t.shape[0]))
-            noise_t[0][0] = train_indicator * max(epsilon, 0.1) * OU.function2(a_t_original[0][0],  0.0 , 0.60, 0.30)
+            noise_t[0][0] = train_indicator * max(epsilon, 0.1) * OU.function2(a_t_original[0][0],  0.0 , 0.60, 0.40)
             #noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  1.0 , 1.00, 0.10)
-            noise_t[0][1] = train_indicator * max(epsilon, 0.1) * OU.function1(a_t_original[0][1],  0.9 , 1.0, 0.10)
+            noise_t[0][1] = train_indicator * max(epsilon, 0.1) * OU.function1(a_t_original[0][1],  0.8 , 1.0, 0.30)
 
             #The following code do the stochastic brake
             #if random.random() <= 0.1:

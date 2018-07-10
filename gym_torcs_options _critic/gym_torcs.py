@@ -160,8 +160,8 @@ class TorcsEnv:
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
             reward = -10.0
-            episode_terminate = True
-            client.R.d['meta'] = True
+            #episode_terminate = True
+            #client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track

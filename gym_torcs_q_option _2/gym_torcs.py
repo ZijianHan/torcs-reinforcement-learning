@@ -168,6 +168,11 @@ class TorcsEnv:
                 reward = -1.0
                 break
 
+        for k in range(11):
+            if opponents[k+3] < TTC_lat_threshold:
+                reward = -1.0
+                break
+
 
 
 
@@ -175,8 +180,8 @@ class TorcsEnv:
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
             reward = -5.0
-            #episode_terminate = True
-            #client.R.d['meta'] = True
+            episode_terminate = True
+            client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track

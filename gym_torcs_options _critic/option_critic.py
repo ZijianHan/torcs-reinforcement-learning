@@ -270,7 +270,7 @@ def playGame(train_indicator=0, safety_constrain_flag = True):    #1 means Train
         state = state.reshape(1, state.shape[0])
         for step in range(args.nsteps):
             total_options += 1
-            option = critic.get_option(state,train_indicator)
+            option = 1#critic.get_option(state,train_indicator)
             reward_option = 0
             for i in range(termination_steps[option]):
                 action = option_policies[option].model.predict(state)

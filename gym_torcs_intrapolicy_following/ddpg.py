@@ -70,8 +70,8 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     #print(ob.opponents)
 
     if (safety_constrain):
-        for i in range(6):
-            if ob.opponents[i+14] < safety_distance_long:
+        for i in range(2):
+            if ob.opponents[i+16] < safety_distance_long:
                 action_accel = 0
                 action_brake = 0.2
                 print("Frontal collision warning")
@@ -185,7 +185,7 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
             a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
 
-            a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob,False)
+            a_t_primitive = Get_actions(a_t[0][0],a_t[0][1],ob,True)
 
             ob, r_t, done, info = env.step(a_t_primitive)
 
