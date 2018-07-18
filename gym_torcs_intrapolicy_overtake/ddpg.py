@@ -20,6 +20,9 @@ from OU import OU
 import timeit
 import snakeoil3_gym as snakeoil3
 
+import csv
+import scipy.io as sio
+
 OU = OU()       #Ornstein-Uhlenbeck Process
 def Get_actions(delta, speed_target, ob, safety_constrain = True):
     ob_angle = ob.angle
@@ -109,6 +112,7 @@ def Get_actions(delta, speed_target, ob, safety_constrain = True):
     #print('accel:',action_accel)
     #print('brake:',action_brake)
     return a_t
+
 def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Train, 0 means simply Run
     #initialization = 0
     episode_trained = 0
@@ -127,7 +131,7 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
     vision = False
 
     EXPLORE = 100000.
-    episode_count = 3000
+    episode_count = 1500
     max_steps = 500
     reward = 0
     done = False
@@ -176,6 +180,11 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
         print("Cannot find the weight")
 
     print("TORCS Experiment Start.")
+    cumreward_list = []
+    average_step_reward_list = []
+    damage_rate_list = []
+    epsilon_list = []
+    results_list = []
 
     for i in range(episode_count):
 
@@ -197,12 +206,12 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
             a_t = np.zeros([1,action_dim])
             noise_t = np.zeros([1,action_dim])
             if train_indicator:
-                a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
+                a_t_original = actor.target_model.predict(s_t.reshape(1, s_t.shape[0]))
             else:
                 a_t_original = actor.target_model.predict(s_t.reshape(1, s_t.shape[0]))
             noise_t[0][0] = train_indicator * max(epsilon, 0.1) * OU.function2(a_t_original[0][0],  0.0 , 0.60, 0.40)
             #noise_t[0][1] = train_indicator * max(epsilon, 0.0) * OU.function(a_t_original[0][1],  1.0 , 1.00, 0.10)
-            noise_t[0][1] = train_indicator * max(epsilon, 0.1) * OU.function1(a_t_original[0][1],  0.8 , 1.0, 0.30)
+            noise_t[0][1] = train_indicator * max(epsilon, 0.1) * OU.function1(a_t_original[0][1],  0.8 , 1.0, 0.10)
 
             #The following code do the stochastic brake
             #if random.random() <= 0.1:
@@ -275,7 +284,20 @@ def playGame(train_indicator=0, safety_constrain_flag = False):    #1 means Trai
                 critic.model.save_weights("criticmodel_overtaking.h5", overwrite=True)
                 with open("criticmodel.json", "w") as outfile:
                     json.dump(critic.model.to_json(), outfile)
-
+        if train_indicator:
+            # Save the results
+            cumreward_list.append(total_reward)
+            average_step_reward_list.append(total_reward/j)
+            damage_rate_list.append(damage_rate)
+            epsilon_list.append(epsilon)
+            results_list = [cumreward_list,average_step_reward_list,damage_rate_list,epsilon_list]
+            sio.savemat('results.mat',{'total_reward':cumreward_list,'average_reward':average_step_reward_list,'epsilon':epsilon_list})
+            '''
+            with open('results/results.csv', 'w', newline='') as csvfile:
+                #rewardwriter = csv.writer(csvfile, delimiter=' ',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                rewardwriter = csv.writer(csvfile)
+                rewardwriter.writerow(results_list)
+            '''
         plt.figure(1)
         plt.hold(True)
         plt.subplot(511)
