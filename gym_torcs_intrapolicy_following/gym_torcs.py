@@ -13,7 +13,7 @@ import time
 class TorcsEnv:
     terminal_judge_start = 100  # If after 100 timestep still no progress, terminated
     termination_limit_progress = 5  # [km/h], episode terminates if car is running slower than this limit
-    default_speed = 100
+    default_speed = 120
 
     initial_reset = True
 
@@ -34,6 +34,8 @@ class TorcsEnv:
         time.sleep(0.5)
         os.system('sh autostart.sh')
         time.sleep(0.5)
+        #os.system('sh speedup.sh')
+        #time.sleep(0.5)
 
         """
         # Modify here if you use multiple tracks in the environment
@@ -78,10 +80,10 @@ class TorcsEnv:
             if client.S.d['speedX'] < target_speed - (client.R.d['steer']*50):
                 client.R.d['accel'] += .02
             else:
-                client.R.d['accel'] -= .01
+                client.R.d['accel'] -= .02
 
-            if client.R.d['accel'] > 0.4:
-                client.R.d['accel'] = 0.4
+            if client.R.d['accel'] > 0.5:
+                client.R.d['accel'] = 0.5
 
             if client.S.d['speedX'] < 10:
                 client.R.d['accel'] += 1/(client.S.d['speedX']+.1)
@@ -134,28 +136,56 @@ class TorcsEnv:
         # direction-dependent positive reward
         track = np.array(obs['track'])
         trackPos = np.array(obs['trackPos'])
-        sp = np.array(obs['speedX'])
+        spX = np.array(obs['speedX'])
+        spY = np.array(obs['speedY'])
         damage = np.array(obs['damage'])
         rpm = np.array(obs['rpm'])
         racePos = obs['racePos']
+        racePos_pre = obs_pre['racePos']
+        opponents = obs['opponents'] # raw distance/200, [0,200]
+        base_point = 17
+        TTC_long_threshold = 10
+        #TTC_long_threshold2 = 15
+        TTC_lat_threshold = 3
+        reward_safety = 0
 
-        progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos']+0.5)
-        reward = progress/10
+        reward_speed = (spX*np.cos(obs['angle']) - np.abs(spX*np.sin(obs['angle'])))
+        reward_track =  - spX * np.abs(obs['trackPos']+0.5)
 
-        # if drive on left, give a negative reward 
-        if trackPos > 0:
-            reward = -5.0
+
+
+        reward = reward_speed/480 + reward_track
+
+        for i in range(2):
+            TTC_long = opponents[i+base_point]
+            if TTC_long < TTC_long_threshold:
+                reward = -1.0
+                break
+
+
+        for j in range(11):
+            if opponents[j+22] < TTC_lat_threshold:
+                reward = -1.0
+                break
+
+        for k in range(11):
+            if opponents[k+3] < TTC_lat_threshold:
+                reward = -1.0
+                break
+
+
+
 
         episode_terminate = False
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
-            reward = -10.0
-            episode_terminate = True
-            client.R.d['meta'] = True
+            reward = -5.0
+            #episode_terminate = True
+            #client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track
-            reward = -10.0
+            reward = -5.0
             episode_terminate = True
             client.R.d['meta'] = True
         '''
@@ -188,10 +218,14 @@ class TorcsEnv:
             self.client.R.d['meta'] = True
             self.client.respond_to_server()
 
+
             ## TENTATIVE. Restarting TORCS every episode suffers the memory leak bug!
             if relaunch is True:
                 self.reset_torcs()
                 print("### TORCS is RELAUNCHED ###")
+
+        #os.system('sh speedup.sh')
+        #time.sleep(0.5)
 
         # Modify here if you use multiple tracks in the environment
         self.client = snakeoil3.Client(p=3101, vision=self.vision)  # Open new UDP in vtorcs
@@ -225,6 +259,8 @@ class TorcsEnv:
         time.sleep(0.5)
         os.system('sh autostart.sh')
         time.sleep(0.5)
+        #os.system('sh speedup.sh')
+        #time.sleep(0.5)
 
     def agent_to_torcs(self, u):
         torcs_action = {'steer': u[0]}
@@ -260,7 +296,8 @@ class TorcsEnv:
                      'track',
                      'trackPos',
                      'wheelSpinVel',
-                     'racePos']
+                     'racePos',
+                     'distFromStart']
             Observation = col.namedtuple('Observaion', names)
             return Observation(focus=np.array(raw_obs['focus'], dtype=np.float32)/200.,
                                speedX=np.array(raw_obs['speedX'], dtype=np.float32)/300.0,
@@ -273,7 +310,8 @@ class TorcsEnv:
                                track=np.array(raw_obs['track'], dtype=np.float32)/200.,
                                trackPos=np.array(raw_obs['trackPos'], dtype=np.float32)/1.,
                                wheelSpinVel=np.array(raw_obs['wheelSpinVel'], dtype=np.float32),
-                               racePos=np.array(raw_obs['racePos'], dtype=np.float32))
+                               racePos=np.array(raw_obs['racePos'], dtype=np.float32),
+                               distFromStart=np.array(raw_obs['distFromStart'], dtype=np.float32))
         else:
             names = ['focus',
                      'speedX', 'speedY', 'speedZ', 'angle',

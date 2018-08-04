@@ -144,7 +144,7 @@ class TorcsEnv:
         racePos_pre = obs_pre['racePos']
         opponents = obs['opponents'] # raw distance/200, [0,200]
         base_point = 17
-        TTC_long_threshold = 15
+        TTC_long_threshold = 10
         #TTC_long_threshold2 = 15
         TTC_lat_threshold = 3
         reward_safety = 0
@@ -180,8 +180,8 @@ class TorcsEnv:
         # collision detection
         if obs['damage'] - obs_pre['damage'] > 0:
             reward = -5.0
-            episode_terminate = True
-            client.R.d['meta'] = True
+            #episode_terminate = True
+            #client.R.d['meta'] = True
 
 
         if (abs(track.any()) > 1 or abs(trackPos) > 1):  # Episode is terminated if the car is out of track
@@ -224,8 +224,8 @@ class TorcsEnv:
                 self.reset_torcs()
                 print("### TORCS is RELAUNCHED ###")
 
-        os.system('sh speedup.sh')
-        time.sleep(0.5)
+        #os.system('sh speedup.sh')
+        #time.sleep(0.5)
 
         # Modify here if you use multiple tracks in the environment
         self.client = snakeoil3.Client(p=3101, vision=self.vision)  # Open new UDP in vtorcs
@@ -259,8 +259,8 @@ class TorcsEnv:
         time.sleep(0.5)
         os.system('sh autostart.sh')
         time.sleep(0.5)
-        os.system('sh speedup.sh')
-        time.sleep(0.5)
+        #os.system('sh speedup.sh')
+        #time.sleep(0.5)
 
     def agent_to_torcs(self, u):
         torcs_action = {'steer': u[0]}
